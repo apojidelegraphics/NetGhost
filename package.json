@@ -3,10 +3,10 @@
   "productName": "NetGhost",
   "version": "1.0.0",
   "description": "Ambient network & security terminal engine — a procedural \"ghost console\" monitor and stream backdrop. Simulation only; no real network activity.",
-  "author": "Apoji_Delegraphics",
+  "author": { "name": "Apoji_Delegraphics", "email": "apojidelegraphics@users.noreply.github.com" },
   "license": "MIT",
   "main": "main.js",
-  "homepage": "https://github.com/Apoji-Delegraphics/netghost",
+  "homepage": "https://github.com/apojidelegraphics/NetGhost",
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
