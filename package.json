@@ -1,0 +1,53 @@
+{
+  "name": "netghost",
+  "productName": "NetGhost",
+  "version": "1.0.0",
+  "description": "Ambient network & security terminal engine — a procedural \"ghost console\" monitor and stream backdrop. Simulation only; no real network activity.",
+  "author": "Apoji_Delegraphics",
+  "license": "MIT",
+  "main": "main.js",
+  "homepage": "https://github.com/Apoji-Delegraphics/netghost",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.apoji.netghost",
+    "productName": "NetGhost",
+    "copyright": "© Apoji_Delegraphics",
+    "directories": { "output": "release", "buildResources": "build" },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "!**/*.map"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [ { "target": "dmg", "arch": ["universal"] }, { "target": "zip", "arch": ["universal"] } ],
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [ { "target": "nsis", "arch": ["x64"] }, { "target": "portable", "arch": ["x64"] } ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "linux": {
+      "target": [ "AppImage", "deb" ],
+      "category": "Utility",
+      "icon": "build/icon.png"
+    }
+  }
+}
