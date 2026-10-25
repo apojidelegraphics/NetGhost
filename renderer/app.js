@@ -24,6 +24,8 @@ const A=(rgb,s)=>`\x1b[38;2;${rgb[0]};${rgb[1]};${rgb[2]}m${s}\x1b[0m`;
 const pri=s=>A(PRI,s), dim=s=>A(RGB.dim,s), fg=s=>A(RGB.fg,s), wht=s=>A(RGB.white,s);
 const cyan=s=>A(RGB.cyan,s), amber=s=>A(RGB.amber,s), red=s=>A(RGB.red,s), mag=s=>A(RGB.magenta,s), blue=s=>A(RGB.blue,s);
 function pad(s,n){s=String(s);return s.length>=n?s:s+" ".repeat(n-s.length);}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function openPortCount(){return W.targets.reduce((a,t)=>a+t.ports.filter(p=>p.state==="open").length,0);}
 
 /* ---------- themes ---------- */
 const THEMES={
@@ -54,22 +56,35 @@ const ts=()=>new Date().toTimeString().slice(0,8);
 const tsU=()=>{const d=new Date();return d.toTimeString().slice(0,8)+"."+String(d.getMilliseconds()).padStart(3,"0")+R.i(100,999);};
 
 /* ---------- world state ---------- */
-const W={ghost:false,paused:false,scene:"ghostnet",speed:"normal",density:"normal",
-  targets:[],hops:[],threats:[],threatScore:0,queue:[],ppsAcc:0,pps:0,start:Date.now(),
+const W={ghost:false,paused:false,streaming:false,scene:"ghostnet",speed:"normal",density:"normal",
+  targets:[],hops:[],threats:[],threatScore:0,queue:[],ppsAcc:0,pps:0,start:Date.now(),agents:[],
   res:{cpu:6,mem:22,net:4,disk:11,temp:41,fd:800,sock:120,hist:[]}};
 const SESS=(R.hex(4)+"-"+R.hex(4)).toUpperCase();
 /* cross-window sync: the main window is the source of SYS.LOAD; monitor pop-outs
    mirror it so every window shows identical load. */
 const IS_MON=/monitor/.test(location.hash);
+const LOAD_LS="netghost.sync.v1";
+const WIN_ID=R.hex(8);           // this window's id, for counting open "ports" (windows)
+const WINS={};                   // id -> lastSeen ms (heartbeats from every open window)
 let BC=null; try{BC=new BroadcastChannel("netghost-sync");}catch(e){}
 const USE_IPC=()=>!!(window.netghost&&window.netghost.sync);
-function sendSync(m){ if(USE_IPC())window.netghost.sync(m); else if(BC){try{BC.postMessage(m);}catch(e){}} }
-function onSync(m){ if(!IS_MON||!m)return;
+/* three transports so load mirrors in Electron (IPC), browser popups (BroadcastChannel)
+   and anywhere else (localStorage 'storage' events). */
+function sendSync(m){
+  if(USE_IPC()){ try{window.netghost.sync(m);}catch(e){} return; }
+  if(BC){try{BC.postMessage(m);}catch(e){}}
+  try{localStorage.setItem(LOAD_LS,JSON.stringify(Object.assign({_n:Date.now()+Math.random()},m)));}catch(e){}
+}
+function onSync(m){ if(!m)return;
+  if(m.t==="hb"){ WINS[m.id]=Date.now(); return; }   // window heartbeat — all windows count these
+  if(!IS_MON)return;                                  // the rest only mirrors into monitor pop-outs
   if(m.t==="res"){ W.res=m.res; renderMeters(); }
   else if(m.t==="pps"){ const e=document.getElementById("s-pps"); if(e)e.textContent=Number(m.v).toLocaleString(); }
+  else if(m.t==="agent"&&m.entry){ W.agents.unshift(m.entry); W.agents=W.agents.slice(0,30); renderAgents(); }
 }
 if(BC)BC.onmessage=e=>onSync(e.data||{});
 if(window.netghost&&window.netghost.onSync)window.netghost.onSync(onSync);
+addEventListener("storage",e=>{ if(e.key===LOAD_LS&&e.newValue){ try{onSync(JSON.parse(e.newValue));}catch(_){} } });
 const DMUL={sparse:.6,normal:1,dense:1.7};
 const SPEEDS={slow:{g:950,a:2200},normal:{g:520,a:1400},fast:{g:300,a:800},overdrive:{g:150,a:420}};
 function dn(a,b){return R.i(Math.max(1,Math.round(a*DMUL[W.density])),Math.round(b*DMUL[W.density]));}
@@ -146,6 +161,7 @@ function renderTopo(){
   }).join("");
   document.getElementById("topoct").textContent=W.targets.length;
   document.getElementById("s-tgt").textContent=W.targets.length;
+  const sv=document.getElementById("s-svc"); if(sv)sv.textContent=openPortCount();
 }
 function rebuildHops(){
   W.hops=[];const n=R.i(4,8);
@@ -313,7 +329,7 @@ function setScene(id,silent){
 /* ============================================================================
    CLOCKS
    ========================================================================== */
-let cU,cR,cP,cA,cG,cPlug;
+let cU,cR,cP,cA,cG,cPlug,cAgent,cHB;
 function startClocks(){
   stopClocks();const sp=SPEEDS[W.speed];
   cU=setInterval(()=>{const s=Math.floor((Date.now()-W.start)/1000);document.getElementById("s-up").textContent=[s/3600,s/60%60,s%60].map(x=>String(Math.floor(x)).padStart(2,"0")).join(":");},1000);
@@ -324,16 +340,23 @@ function startClocks(){
   cA=setInterval(ambient,sp.a);
   cG=setInterval(ghostTick,sp.g);
   cPlug=setInterval(pluginBurst,60000); // fire a few installed plugins every minute
+  cAgent=setInterval(()=>{ if(IS_MON||W.paused||!active())return; aiAgent(); },50000); // auto agent report while running
+  cHB=setInterval(()=>{   // heartbeat: announce this window + count how many "ports" (windows) are open
+    WINS[WIN_ID]=Date.now(); sendSync({t:"hb",id:WIN_ID});
+    const now=Date.now(); for(const k in WINS) if(now-WINS[k]>6000) delete WINS[k];
+    const e=document.getElementById("s-ports"); if(e)e.textContent=Object.keys(WINS).length;
+  },2000);
 }
-function stopClocks(){[cU,cR,cP,cA,cG,cPlug].forEach(clearInterval);}
-function ambient(){ if(W.paused)return;
+function stopClocks(){[cU,cR,cP,cA,cG,cPlug,cAgent,cHB].forEach(clearInterval);}
+function active(){ return W.ghost||W.streaming; }   // is the stream running?
+function ambient(){ if(W.paused||!active())return;
   if(W.queue.length){ try{W.queue.shift()();}catch(e){} if(W.queue.length&&R.chance(.6)){try{W.queue.shift()();}catch(e){}} return; }
   if(W.ghost)return;
   if(R.chance(.5))GEN.syslog(); if(R.chance(.3))GEN.tcpdump();
 }
 /* every minute, visibly run a couple of installed plugins (scene-bearing ones) */
 function pluginBurst(){
-  if(W.paused||IS_MON)return;
+  if(W.paused||IS_MON||!active())return;
   const ids=Object.keys(ENABLED).filter(id=>ENABLED[id].scenes&&Object.keys(ENABLED[id].scenes).length);
   if(!ids.length)return;
   const pick=R.shuffle(ids).slice(0,R.i(2,3));
@@ -360,7 +383,8 @@ function ghostTick(){ if(!W.ghost||W.paused)return;
 /* ============================================================================
    COMMANDS
    ========================================================================== */
-const HELP=[["help","this list"],["scan [ip]","nmap-style sweep"],["nmap <ip>","alias for scan"],["ping [ip]","icmp echo"],
+const HELP=[["help","this list"],["ghost v_start3","begin the ambient stream"],["ghost v_stop3","halt the stream (idle)"],
+  ["scan [ip]","nmap-style sweep"],["nmap <ip>","alias for scan"],["ping [ip]","icmp echo"],
   ["trace [ip]","route via proxy chain"],["hydra [ip]","credential audit"],["sniff","dump packets"],["syslog","tail log feed"],
   ["scene <id>","switch scene (recon/redteam/ddos/soc/ghostnet)"],["ghost","toggle auto-ghost"],["targets","list hosts"],
   ["hops","rebuild proxy chain"],["setup","open config"],["reseed [n]","regen world"],["pause","freeze streams"],
@@ -389,7 +413,13 @@ function runCmd(raw){
     case"scene":if(SCENES[a]){setScene(a);syncCfg();}else wl(red("unknown scene — try recon/redteam/ddos/soc/ghostnet")+"\n");break;
     case"theme":if(THEMES[a]){applyTheme(a);syncCfg();wl(pri("theme → "+a)+"\n");}else wl(red("themes: green amber cyan clash mono")+"\n");break;
     case"speed":if(SPEEDS[a]){W.speed=a;startClocks();syncCfg();wl(pri("speed → "+a)+"\n");}else wl(red("speed: slow normal fast overdrive")+"\n");break;
-    case"ghost":toggleGhost();break;
+    case"start":case"go":case"run":startStream();break;
+    case"stop":case"halt":stopStream();break;
+    case"ghost":
+      if((a||"").toLowerCase()==="v_start3")startStream();
+      else if((a||"").toLowerCase()==="v_stop3")stopStream();
+      else toggleGhost();
+      break;
     case"targets":case"ls":
       if(!W.targets.length)wl(dim("no targets yet — run scan"));
       W.targets.forEach(t=>wl("  "+blue(pad(t.ip,16))+wht(pad(t.host,26))+dim(pad(t.os,20))+(t.breached?red("BREACHED"):pri(t.ports.filter(x=>x.state==="open").length+" open"))));
@@ -430,6 +460,12 @@ function togglePause(){
   W.paused=!W.paused;
   const b=document.getElementById("b-pause");b.classList.toggle("on",W.paused);b.textContent=W.paused?"▶Run":"⏸Hold";
 }
+function startStream(){ if(W.streaming){wl(dim("stream already running")+"\n");return;} W.streaming=true;
+  document.getElementById("s-link").textContent=W.ghost?"ENGAGED":"LIVE";
+  wl("");wl(pri("▶ STREAM STARTED ")+dim("— ambient feed is live.  'ghost v_stop3' to halt · 'ghost' for Auto-Ghost"));wl(""); }
+function stopStream(){ W.streaming=false; W.queue=[];
+  if(!W.ghost)document.getElementById("s-link").textContent="GHOST";
+  wl("");wl(dim("■ stream stopped — idle.  type ")+wht("ghost v_start3")+dim(" to resume"));wl(""); }
 function reseed(n){
   SEED=(n!=null&&!isNaN(n))?n>>>0:(Math.random()*1e9)>>>0;rng=mulberry32(SEED);
   W.targets=[];W.threats=[];W.threatScore=0;W.queue=[];
@@ -586,31 +622,49 @@ function worldSummary(){
   ].join("\n");
 }
 const AGENTS=["GHOST-ANALYST","RECON-ORACLE","THREAT-SEER","NET-WARDEN","SIGINT-BOT"];
-function simReport(who,topic){
-  const br=W.targets.filter(t=>t.breached).length;
-  const open=W.targets.reduce((a,t)=>a+t.ports.filter(p=>p.state==="open").length,0);
-  [ `ASSESSMENT: posture ${R.pick(["nominal","elevated","degrading","critical"])} across ${W.targets.length} hosts.`,
+const AGENT_TOPICS=["current operation","threat posture","the breached hosts","exfil risk","next move","the proxy chain","open attack surface"];
+const AGENT_ACTIONS=["pushing a fix","flagging a threat","recommending rotation","escalating watch","queuing remediation","opening a ticket","advising isolation","greenlighting the next step"];
+function simLines(topic){
+  const br=W.targets.filter(t=>t.breached).length, open=openPortCount();
+  return [
+    `ASSESSMENT: posture ${R.pick(["nominal","elevated","degrading","critical"])} across ${W.targets.length} hosts.`,
     `${br} breach indicator(s) · ${open} open services · threat ${W.threatScore}/100.`,
     `Attribution risk ${R.pick(["low","moderate","rising"])} behind ${W.hops.length}-hop chain.`,
     `RECOMMEND: ${R.pick(["rotate exit nodes","isolate "+((R.pick(W.targets)||{}).host||"segment"),"escalate watch on port "+R.pick(PORTLIST),"hold posture","pull creds from "+((R.pick(W.targets)||{}).host||"vault")])}.`
-  ].forEach(l=>wl(fg("  "+l)));
-  wl(dim("  — "+who+" · simulated (enable AI in setup for live analysis)"));
+  ];
+}
+/* agent reports go to the AGENT.FEED panel; the stream only gets a one-liner */
+function postAgent(who,topic,lines,src){
+  const entry={who,topic,lines,src,t:new Date().toTimeString().slice(0,8)};
+  W.agents.unshift(entry); W.agents=W.agents.slice(0,30); renderAgents();
+  sendSync({t:"agent",entry});
+}
+function renderAgents(){
+  const c=document.getElementById("agentct"); if(c)c.textContent=W.agents.length;
+  const el=document.getElementById("agentfeed"); if(!el)return;
+  el.innerHTML=W.agents.slice(0,12).map(a=>
+    `<div class="agent"><div class="ahead"><span class="awho">${esc(a.who)}</span><span class="atime">${esc(a.t)}</span></div>`+
+    `<div class="atopic">re: ${esc(a.topic)}</div>`+
+    a.lines.map(l=>`<div class="aline">${esc(l)}</div>`).join("")+
+    `<div class="asrc">${esc(a.src)}</div></div>`).join("");
 }
 async function aiAgent(query){
-  const who=R.pick(AGENTS), topic=query||"current operation";
-  wl(mag("◆ AGENT ")+wht(who)+dim(" · analyzing "+topic+" …"));
+  const who=R.pick(AGENTS), topic=query||R.pick(AGENT_TOPICS);
+  let lines, src;
   if(W.ai.enabled&&W.ai.key){
     try{
       const out=await callOpenRouter([
         {role:"system",content:"You are "+who+", a cyber-ops analyst speaking inside the fictional NetGhost terminal. Everything here is a harmless SIMULATION — no real infrastructure. Output ONLY the intelligence report: 3 to 5 short lines of plain terminal text. Hard rules: no markdown, no bullet symbols, no preamble, no sign-off; do NOT restate, acknowledge, or reason about the task or these rules; begin immediately with the first line of the report. Be terse, confident and a little cinematic, and reference the actual hosts and threats in the telemetry. If the requested topic is nonsensical or unrelated, note that in one short line, then report on the current operation instead."},
         {role:"user",content:"Topic: "+topic+"\nTelemetry:\n"+worldSummary()}
       ]);
-      const rep=cleanReport(out);
-      if(rep.length){ rep.forEach(l=>wl(fg("  "+l))); wl(dim("  — "+who+" · via OpenRouter · "+(W.ai.model||""))); }
-      else { wl(dim("  (model returned no clean report — using local analysis)")); simReport(who,topic); }
-    }catch(e){ wl(red("  agent link failed: ")+dim(e.message)); simReport(who,topic); }
-  } else simReport(who,topic);
-  wl("");
+      lines=cleanReport(out); src="OpenRouter · "+(W.ai.model||"");
+      if(!lines.length){ lines=simLines(topic); src="local (no clean output)"; }
+    }catch(e){ lines=simLines(topic);
+      const m=/Failed to fetch|NetworkError|load failed|CSP|blocked/i.test(e.message||"")?"network blocked here — live AI works in the desktop app":(e.message||"error");
+      src="local ("+m+")"; }
+  } else { lines=simLines(topic); src="local analysis"; }
+  wl(mag("◆ ")+wht(who)+dim(" responded → ")+fg(R.pick(AGENT_ACTIONS))+dim("  (see AGENT.FEED)"));
+  postAgent(who,topic,lines,src);
 }
 /* ----- stream / OBS ----- */
 function setKiosk(on){ document.body.classList.toggle("kiosk",on); try{fit.fit();}catch(e){} }
@@ -760,12 +814,12 @@ function boot(){
     ()=>wl(pri("[ok] ")+dim(`discovered ${W.targets.length} candidate hosts on bridged segment`)),
     ()=>wl(pri("[ok] ")+dim(`anonymizing route · ${W.hops.length} hops · exit ${R.pick(COUNTRIES)[0]}`)),
     ()=>wl(pri("[ok] ")+dim("stream generators armed: nmap · hydra · tcpdump · syslog")),
-    ()=>{wl("");wl(pri("ready. ")+dim("type 'help'  ·  'ghost' or Ctrl+Shift+G = Auto-Ghost  ·  Esc = setup  ·  'full' = fullscreen"));wl("");startPrompt();term.focus();}
+    ()=>{wl("");wl(pri("ready — type ")+wht("ghost v_start3")+pri(" to begin the stream")+dim("   ·  'ghost' = Auto-Ghost  ·  Esc = setup  ·  'help'"));wl("");startPrompt();term.focus();}
   ];
   seq.forEach((f,i)=>setTimeout(f,350+i*340));
   startClocks();
   applyParams();
-  if(mon){document.querySelector("#controls").style.display="none";setTimeout(()=>{if(!W.ghost)toggleGhost();},2300);}
+  if(mon){W.streaming=true;document.querySelector("#controls").style.display="none";setTimeout(()=>{if(!W.ghost)toggleGhost();},2300);}
 }
 boot();
 

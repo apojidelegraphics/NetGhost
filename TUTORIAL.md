@@ -38,9 +38,10 @@ is live AI — more on that in section 10.)
 
 NetGhost is a split-pane console. From the outside in:
 
-- **Top bar** — the NETGHOST logo, and live stats: **LINK** (ghost/engaged),
-  **SCENE**, **TARGETS** (hosts found), **PKT/S** (packets per second), **THREAT**
-  level, and **UPTIME**. On the right are the buttons:
+- **Top bar** — the NETGHOST logo, and live stats: **LINK** (idle/live/engaged),
+  **SCENE**, **TARGETS** (hosts found), **PORTS** (how many NetGhost windows/pop-outs are
+  open), **SERVICES** (total open nmap ports across hosts), **PKT/S**, **THREAT**, and
+  **UPTIME**. On the right are the buttons:
   `▶Ghost` · `⚙Setup` · `⊞ Pkgs` · `⏸Hold` · `⧉Pop` · `⛶Full`.
 - **Left column**
   - **PROXY.CHAIN** — the fake anonymizing hops your traffic is "routed" through.
@@ -76,6 +77,8 @@ Click the console and type. Press **Enter** to run. Use **↑ / ↓** for histor
 | Command | What it does |
 |---|---|
 | `help` | List all commands |
+| `ghost v_start3` | Begin the ambient stream (NetGhost boots idle) |
+| `ghost v_stop3` | Halt the stream — back to idle |
 | `scan [ip]` / `nmap <ip>` | Port/service sweep of a host (random if no IP) |
 | `ping [ip]` | ICMP echo |
 | `trace [ip]` | Traceroute through the proxy chain |

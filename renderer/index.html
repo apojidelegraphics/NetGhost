@@ -161,6 +161,14 @@ body.noflicker #flick{display:none}
 /* threat list */
 .thr{font-size:11px;padding:1px 0;border-bottom:1px dotted var(--line);display:flex;gap:6px}
 .thr .tt{color:var(--dim)} .sev-crit{color:var(--red)} .sev-high{color:var(--amber)} .sev-med{color:var(--magenta)} .sev-low{color:var(--dim)}
+/* agent feed */
+.agent{border-bottom:1px solid var(--line);padding:6px 2px 8px;margin-bottom:2px}
+.agent .ahead{display:flex;align-items:baseline;gap:6px}
+.agent .awho{font-family:var(--pixel);font-size:9px;color:var(--cyan);letter-spacing:.3px}
+.agent .atime{margin-left:auto;font-family:var(--pixel);font-size:8px;color:var(--dim)}
+.agent .atopic{font-size:11px;color:var(--amber);margin:2px 0 3px}
+.agent .aline{font-size:12px;color:var(--fg);line-height:1.35;padding-left:6px;border-left:2px solid var(--line2);margin-bottom:1px}
+.agent .asrc{font-family:var(--pixel);font-size:8px;color:var(--dim);margin-top:4px}
 
 /* terminal ------------------------------------------------------------- */
 #main{grid-area:main;position:relative;overflow:hidden;padding:0}
@@ -243,6 +251,8 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
       <div class="stat"><div class="l">◉ LINK</div><div class="v good" id="s-link">GHOST</div></div>
       <div class="stat"><div class="l">SCENE</div><div class="v" id="s-scene">GHOSTNET</div></div>
       <div class="stat"><div class="l">TARGETS</div><div class="v" id="s-tgt">0</div></div>
+      <div class="stat"><div class="l">PORTS</div><div class="v good" id="s-ports">1</div></div>
+      <div class="stat"><div class="l">SERVICES</div><div class="v" id="s-svc">0</div></div>
       <div class="stat"><div class="l">PKT/S</div><div class="v" id="s-pps">0</div></div>
       <div class="stat"><div class="l">THREAT</div><div class="v" id="s-threat">LOW</div></div>
       <div class="stat"><div class="l">UPTIME</div><div class="v" id="s-up">00:00:00</div></div>
@@ -267,6 +277,10 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
       <div class="ph"><b>TARGET.MAP</b><span class="rt" id="topoct">0</span></div>
       <div class="body" id="topo"></div>
     </div>
+    <div class="panel k4 sub">
+      <div class="ph"><b>THREAT.MATRIX</b><span class="rt" id="thrlvl">LOW</span></div>
+      <div class="body" id="threat"></div>
+    </div>
   </div>
 
   <!-- ================= MAIN ================= -->
@@ -278,13 +292,13 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
 
   <!-- ================= RIGHT ================= -->
   <div id="right">
-    <div class="panel k4 sub">
+    <div class="panel k4 sub" style="flex:0 0 auto">
       <div class="ph"><b>SYS.LOAD</b><span class="rt" id="s-load">idle</span></div>
       <div class="body" id="meters"></div>
     </div>
-    <div class="panel k2 sub" style="flex:0 0 auto;max-height:190px">
-      <div class="ph"><b>THREAT.MATRIX</b><span class="rt" id="thrlvl">LOW</span></div>
-      <div class="body" id="threat"></div>
+    <div class="panel k3 sub">
+      <div class="ph"><b>AGENT.FEED</b><span class="rt" id="agentct">0</span></div>
+      <div class="body" id="agentfeed"></div>
     </div>
   </div>
 </div>
