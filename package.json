@@ -1,12 +1,9 @@
 {
   "name": "netghost",
   "productName": "NetGhost",
-  "version": "1.0.4",
+  "version": "1.0.0",
   "description": "Ambient network & security terminal engine — a procedural \"ghost console\" monitor and stream backdrop. Simulation only; no real network activity.",
-  "author": {
-    "name": "Apoji_Delegraphics",
-    "email": "apojidelegraphics@users.noreply.github.com"
-  },
+  "author": { "name": "Apoji_Delegraphics", "email": "apojidelegraphics@users.noreply.github.com" },
   "license": "MIT",
   "main": "main.js",
   "homepage": "https://github.com/apojidelegraphics/NetGhost",
@@ -26,10 +23,7 @@
     "appId": "com.apoji.netghost",
     "productName": "NetGhost",
     "copyright": "© Apoji_Delegraphics",
-    "directories": {
-      "output": "release",
-      "buildResources": "build"
-    },
+    "directories": { "output": "release", "buildResources": "build" },
     "files": [
       "main.js",
       "preload.js",
@@ -38,37 +32,11 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "universal"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "universal"
-          ]
-        }
-      ],
+      "target": [ { "target": "dmg", "arch": ["universal"] }, { "target": "zip", "arch": ["universal"] } ],
       "icon": "build/icon.png"
     },
     "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
+      "target": [ { "target": "nsis", "arch": ["x64"] }, { "target": "portable", "arch": ["x64"] } ],
       "icon": "build/icon.png"
     },
     "nsis": {
@@ -77,10 +45,7 @@
       "createDesktopShortcut": true
     },
     "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
+      "target": [ "AppImage", "deb" ],
       "category": "Utility",
       "icon": "build/icon.png"
     }

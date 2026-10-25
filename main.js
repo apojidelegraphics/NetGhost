@@ -83,6 +83,13 @@ app.whenReady().then(() => {
   });
   ipcMain.on("popout", () => openMonitor());
 
+  // relay SYS.LOAD sync from the source window to every other window
+  ipcMain.on("ng-sync", (e, data) => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (w.webContents !== e.sender) w.webContents.send("ng-sync", data);
+    }
+  });
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
   });

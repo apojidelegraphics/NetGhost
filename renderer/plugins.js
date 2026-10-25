@@ -139,4 +139,63 @@ NG.registerPlugin({
     ops:[{fn:()=>A.q(hphRun),w:5},{fn:()=>A.q(()=>A.wl(A.dim(`${new Date().toTimeString().slice(0,8)} `)+A.cyan("webhook ")+A.dim(`POST /hook/${A.R.hex(8)} → 200  queued`))),w:2}]} }
 });
 
+/* ---------- 7. WharF (Docker dupe) ----------------------------------------- */
+const W_IMG=["nginx:latest","redis:7","postgres:16","node:20-alpine","python:3.12","ubuntu:24.04","grafana/grafana","traefik:v3","mongo:7","rabbitmq:3-mgmt"];
+const W_NAME=["gallant_turing","cranky_hopper","ghost_api","eager_bardeen","vivid_mccarthy","proud_wharf","busy_nexus","zen_ritchie"];
+const W_ST=[["Up","ok"],["Up","ok"],["Up","ok"],["Restarting","warn"],["Exited (0)","dim"],["Exited (137)","bad"],["Created","dim"]];
+function wharfPs(n){ const {wl,dim,fg,amber,red,wht,R}=A;
+  wl(dim("CONTAINER ID   IMAGE                STATUS            PORTS                   NAMES"));
+  for(let i=0;i<n;i++){ const st=R.pick(W_ST), col=st[1]==="bad"?red:st[1]==="warn"?amber:st[1]==="dim"?dim:fg;
+    wl(dim(A.pad(R.hex(12),15))+dim(A.pad(R.pick(W_IMG),21))+col(A.pad(st[0],18))+dim(A.pad(st[1]==="ok"?`0.0.0.0:${R.i(1024,65535)}->${R.pick([80,443,5432,6379,3000])}/tcp`:"",24))+wht(R.pick(W_NAME))); } }
+function wharfPull(){ const {wl,dim,fg,pri,R}=A; const img=R.pick(W_IMG);
+  wl(dim("$ ")+A.wht("wharf pull "+img));
+  for(let i=0;i<R.i(2,4);i++)wl(dim(R.hex(12)+": ")+(R.chance(.5)?pri("Pull complete"):dim("Downloading ")+fg(R.i(10,99)+"%")));
+  wl(pri("Status: ")+fg("Downloaded "+img)); }
+NG.registerPlugin({
+  id:"wharf", name:"WharF", desc:"Docker-style container console — ps, image pulls, container churn",
+  commands:{
+    wharf:(args)=>{ const sub=(args[0]||"ps").toLowerCase(); A.wl(A.dim("$ ")+A.wht("wharf "+sub)); if(sub==="pull")wharfPull(); else wharfPs(A.R.i(4,8)); A.wl(""); },
+    docker:()=>{ A.wl(A.dim("$ ")+A.wht("docker ps")); wharfPs(A.R.i(4,8)); A.wl(""); }
+  },
+  scenes:{ containers:{name:"CONTAINERS", desc:"A WharF host breathing — containers starting, restarting, OOM-killed, images pulled.",
+    ops:[{fn:()=>A.q(()=>wharfPs(A.R.i(3,6))),w:4},{fn:()=>A.q(wharfPull),w:2}]} }
+});
+
+/* ---------- 8. SatCom (satellite / SDR) ------------------------------------ */
+const SATS=["GHOST-1","IRIDIUM-9","SENTINEL-2B","STARINK-4411","NROL-GHOST","AQUA-7","METEOR-M2"];
+function satFeed(n){ const {wl,dim,fg,pri,amber,cyan,R}=A;
+  for(let i=0;i<n;i++){ const s=R.pick(SATS);
+    if(R.chance(.25)) wl(pri("[LOCK] ")+fg(s)+dim(`  AOS · az ${R.i(0,359)}° el ${R.i(1,89)}° · downlink ${R.i(1,300)} Mbps`));
+    else if(R.chance(.1)) wl(amber("[LOS] ")+dim(s+" over horizon — signal lost"));
+    else wl(dim(A.pad(s,14))+cyan(A.pad(R.i(400,1200)+"km",9))+dim(`dop ${R.i(-9,9)}kHz  BER 1e-${R.i(3,9)}  ${R.i(20,99)}% frame-lock`)); } }
+NG.registerPlugin({
+  id:"satcom", name:"SatCom", desc:"Satellite/SDR uplink telemetry — passes, signal lock, downlink bitrate",
+  commands:{ satcom:()=>{ A.wl(A.dim("$ ")+A.wht("satcom --track all")); satFeed(A.R.i(4,7)); A.wl(""); }, uplink:()=>satFeed(A.R.i(3,5)) },
+  scenes:{ orbit:{name:"ORBITAL", desc:"Ground-station sweep — satellites rising and setting, locks acquired and lost, downlink streaming.",
+    ops:[{fn:()=>{for(let i=0;i<A.R.i(3,6);i++)A.q(()=>satFeed(1));},w:5}]} }
+});
+
+/* ---------- 9. Mainframe (retro z/OS + a theme) ---------------------------- */
+const JOBS=["PAYROLL","BATCHLD","EOD0100","CICSPROD","DB2BKUP","RPTGEN","SORT900","FTPXFER"];
+function jcl(n){ const {wl,dim,fg,red,R}=A;
+  for(let i=0;i<n;i++){ const j=R.pick(JOBS)+R.i(100,999);
+    if(R.chance(.15)) wl(red("ABEND ")+dim(j+" ")+red(R.pick(["S0C7","S806","U4038","SB37"]))+dim(" — step failed"));
+    else wl(dim(`JOB${R.i(10000,99999)} `)+fg(A.pad(j,11))+dim(A.pad(R.pick(["SUBMITTED","EXECUTING","ON OUTPUT QUEUE","MAXCC=0000","RC=0004"]),18))+dim(R.i(1,9999)+" lines")); } }
+NG.registerPlugin({
+  id:"mainframe", name:"Mainframe", desc:"Retro z/OS batch — JCL jobs, JES queue, MAXCC codes, occasional ABEND (adds 'ibm' theme)",
+  commands:{ mainframe:()=>{ A.wl(A.dim("$ ")+A.wht("tso status")); jcl(A.R.i(5,8)); A.wl(""); }, jcl:()=>jcl(A.R.i(4,6)) },
+  scenes:{ batch:{name:"MAINFRAME", desc:"The batch window — JCL submitted, jobs cycling through JES, MAXCC codes and abends scrolling.",
+    ops:[{fn:()=>{for(let i=0;i<A.R.i(4,7);i++)A.q(()=>jcl(1));},w:5}]} },
+  themes:{ ibm:{rgb:[120,200,255], vars:{'--primary':'#78c8ff','--primary2':'#2d6fa0','--fg':'#c6d6e6'}} }
+});
+
+/* ---------- 10. VideoWall (opens pop-out monitors) ------------------------- */
+NG.registerPlugin({
+  id:"videowall", name:"VideoWall", desc:"open extra monitor pop-outs — build a wall of ghost screens:  wall [n]",
+  commands:{ wall:(args)=>{ let n=parseInt(args[0])||2; n=Math.max(1,Math.min(4,n));
+    A.wl(A.pri("[wall] ")+A.dim("opening "+n+" monitor window(s)…"));
+    for(let i=0;i<n;i++)setTimeout(()=>A.popout(), i*400);
+    A.wl(""); } }
+});
+
 })();

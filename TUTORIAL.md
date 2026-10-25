@@ -169,7 +169,15 @@ Installed plugins are remembered across launches.
 | `scada` | `scada` command + `scada` scene — industrial Modbus/PLC |
 | `jklinger` | `jk get pods\|nodes\|events` + `cluster` scene — Kubernetes-style |
 | `hph` | `hph` command + `automation` scene — n8n-style workflows |
+| `wharf` | `wharf ps\|pull` (or `docker`) + `containers` scene — Docker-style |
+| `satcom` | `satcom` / `uplink` + `orbit` scene — satellite/SDR telemetry |
+| `mainframe` | `mainframe` / `jcl` + `batch` scene + an `ibm` theme — retro z/OS |
+| `videowall` | `wall [n]` — opens up to 4 monitor pop-outs |
 | `coffee` | `coffee` command — ☕ easter egg |
+
+Installed plugins join the Auto-Ghost `ghostnet` rotation, and NetGhost runs a **plugin
+sweep every minute** so a few of them always fire — even in manual mode. Toggle it with
+**Setup → PLUGINS→AUTO**.
 
 ### Writing your own plugin
 
@@ -267,11 +275,13 @@ clicking a side panel.)
 
 ---
 
-## 13. Multi-monitor / pop-out
+## 13. Multi-monitor / pop-out ("Port")
 
-Press **⧉Pop** (or in the desktop app, menu → **New Monitor Window**) to open a second
-ambient window you can drag to another screen — it auto-runs in Auto-Ghost. Perfect
-for a dedicated monitor or a second OBS source.
+Press **⧉ Port** (or type `port`, or in the desktop app menu → **New Monitor Window**)
+to open a ghost screen in a new window — like opening a port. Drag it to another
+monitor; it auto-runs in Auto-Ghost. Open several for a wall, or use the `videowall`
+plugin's `wall [n]` command to spawn up to four at once. **SYS.LOAD is synced across
+every window**, so all screens show the same CPU/memory/network/temperature.
 
 ---
 

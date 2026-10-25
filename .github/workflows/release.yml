@@ -1,7 +1,7 @@
 name: Build & Release
 
 # Push a version tag (e.g. v1.0.0) to build installers for all three
-# platforms and attach them to a single GitHub Release.
+# platforms and attach them to a GitHub Release.
 on:
   push:
     tags:
@@ -28,33 +28,7 @@ jobs:
       - name: Install dependencies
         run: npm ci || npm install
 
-      - name: Build installers (no publish)
-        run: npx electron-builder --publish never
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-${{ matrix.os }}
-          path: |
-            release/*.dmg
-            release/*.zip
-            release/*.exe
-            release/*.AppImage
-            release/*.deb
-            release/*.yml
-          if-no-files-found: ignore
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**/*
-          fail_on_unmatched_files: false
+      - name: Build & publish (electron-builder)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --publish always

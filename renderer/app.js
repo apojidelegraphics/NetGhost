@@ -56,8 +56,20 @@ const tsU=()=>{const d=new Date();return d.toTimeString().slice(0,8)+"."+String(
 /* ---------- world state ---------- */
 const W={ghost:false,paused:false,scene:"ghostnet",speed:"normal",density:"normal",
   targets:[],hops:[],threats:[],threatScore:0,queue:[],ppsAcc:0,pps:0,start:Date.now(),
-  res:{cpu:6,mem:22,net:4,disk:11,temp:41,hist:[]}};
+  res:{cpu:6,mem:22,net:4,disk:11,temp:41,fd:800,sock:120,hist:[]}};
 const SESS=(R.hex(4)+"-"+R.hex(4)).toUpperCase();
+/* cross-window sync: the main window is the source of SYS.LOAD; monitor pop-outs
+   mirror it so every window shows identical load. */
+const IS_MON=/monitor/.test(location.hash);
+let BC=null; try{BC=new BroadcastChannel("netghost-sync");}catch(e){}
+const USE_IPC=()=>!!(window.netghost&&window.netghost.sync);
+function sendSync(m){ if(USE_IPC())window.netghost.sync(m); else if(BC){try{BC.postMessage(m);}catch(e){}} }
+function onSync(m){ if(!IS_MON||!m)return;
+  if(m.t==="res"){ W.res=m.res; renderMeters(); }
+  else if(m.t==="pps"){ const e=document.getElementById("s-pps"); if(e)e.textContent=Number(m.v).toLocaleString(); }
+}
+if(BC)BC.onmessage=e=>onSync(e.data||{});
+if(window.netghost&&window.netghost.onSync)window.netghost.onSync(onSync);
 const DMUL={sparse:.6,normal:1,dense:1.7};
 const SPEEDS={slow:{g:950,a:2200},normal:{g:520,a:1400},fast:{g:300,a:800},overdrive:{g:150,a:420}};
 function dn(a,b){return R.i(Math.max(1,Math.round(a*DMUL[W.density])),Math.round(b*DMUL[W.density]));}
@@ -166,15 +178,19 @@ function renderMeters(){
     m("NET I/O",r.net,"%",r.net>88?"hot":"")+
     m("DISK",r.disk,"%","")+
     m("CORE TEMP",r.temp,"°",r.temp>78?"crit":r.temp>65?"hot":"")+
-    `<div class="gauge">THRPUT ${(r.net*12.4).toFixed(1)} Mb/s<br>FD ${R.i(200,9000)}  SOCK ${R.i(20,800)}  TASK ${W.queue.length}</div>`;
+    `<div class="gauge">THRPUT ${(r.net*12.4).toFixed(1)} Mb/s<br>FD ${Math.round(r.fd)}  SOCK ${Math.round(r.sock)}  TASK ${W.queue.length}</div>`;
   document.getElementById("s-load").textContent=W.ghost?"ACTIVE":r.cpu>50?"busy":"idle";
 }
 function tickRes(){
+  if(IS_MON)return; // monitor windows receive SYS.LOAD via sync, don't compute their own
   const r=W.res, hi=W.ghost||W.scene==="ddos",
     tg=hi?{cpu:R.i(45,96),mem:R.i(40,88),net:R.i(50,99),temp:R.i(58,82)}:{cpu:R.i(3,18),mem:R.i(18,34),net:R.i(2,20),temp:R.i(38,48)};
   r.cpu+=(tg.cpu-r.cpu)*.25;r.mem+=(tg.mem-r.mem)*.12;r.net+=(tg.net-r.net)*.4;r.temp+=(tg.temp-r.temp)*.08;
   r.disk=Math.min(99,r.disk+(hi?rng()*.4:rng()*.02));
+  r.fd=Math.max(80,r.fd+(hi?R.i(-40,120):R.i(-30,30)));
+  r.sock=Math.max(10,r.sock+(hi?R.i(-20,60):R.i(-15,15)));
   renderMeters();
+  sendSync({t:"res",res:W.res});
 }
 
 /* ============================================================================
@@ -297,18 +313,33 @@ function setScene(id,silent){
 /* ============================================================================
    CLOCKS
    ========================================================================== */
-let cU,cR,cP,cA,cG;
+let cU,cR,cP,cA,cG,cPlug;
 function startClocks(){
   stopClocks();const sp=SPEEDS[W.speed];
   cU=setInterval(()=>{const s=Math.floor((Date.now()-W.start)/1000);document.getElementById("s-up").textContent=[s/3600,s/60%60,s%60].map(x=>String(Math.floor(x)).padStart(2,"0")).join(":");},1000);
   cR=setInterval(tickRes,900);
-  cP=setInterval(()=>{W.pps=W.ppsAcc;W.ppsAcc=0;document.getElementById("s-pps").textContent=(W.ghost||W.scene==="ddos"?R.i(800,24000):W.pps).toLocaleString();},1000);
+  cP=setInterval(()=>{ if(IS_MON)return; W.pps=W.ppsAcc;W.ppsAcc=0;
+    const v=(W.ghost||W.scene==="ddos"?R.i(800,24000):W.pps);
+    document.getElementById("s-pps").textContent=v.toLocaleString(); sendSync({t:"pps",v}); },1000);
   cA=setInterval(ambient,sp.a);
   cG=setInterval(ghostTick,sp.g);
+  cPlug=setInterval(pluginBurst,60000); // fire a few installed plugins every minute
 }
-function stopClocks(){[cU,cR,cP,cA,cG].forEach(clearInterval);}
-function ambient(){ if(W.paused||W.ghost)return;
+function stopClocks(){[cU,cR,cP,cA,cG,cPlug].forEach(clearInterval);}
+function ambient(){ if(W.paused)return;
+  if(W.queue.length){ try{W.queue.shift()();}catch(e){} if(W.queue.length&&R.chance(.6)){try{W.queue.shift()();}catch(e){}} return; }
+  if(W.ghost)return;
   if(R.chance(.5))GEN.syslog(); if(R.chance(.3))GEN.tcpdump();
+}
+/* every minute, visibly run a couple of installed plugins (scene-bearing ones) */
+function pluginBurst(){
+  if(W.paused||IS_MON)return;
+  const ids=Object.keys(ENABLED).filter(id=>ENABLED[id].scenes&&Object.keys(ENABLED[id].scenes).length);
+  if(!ids.length)return;
+  const pick=R.shuffle(ids).slice(0,R.i(2,3));
+  wl("");wl(mag("◆ PLUGIN SWEEP ")+dim("— running "+pick.join(", ")));
+  pick.forEach(id=>{ const sc=ENABLED[id].scenes, ks=Object.keys(sc); const ops=(sc[R.pick(ks)].ops)||[];
+    if(ops.length)try{R.wpick(ops).fn();}catch(e){} });
 }
 /* ops Auto-Ghost draws from: the current scene, plus (in 'ghostnet') every
    installed plugin's scene ops, so plugins join the endless rotation. */
@@ -334,7 +365,7 @@ const HELP=[["help","this list"],["scan [ip]","nmap-style sweep"],["nmap <ip>","
   ["scene <id>","switch scene (recon/redteam/ddos/soc/ghostnet)"],["ghost","toggle auto-ghost"],["targets","list hosts"],
   ["hops","rebuild proxy chain"],["setup","open config"],["reseed [n]","regen world"],["pause","freeze streams"],
   ["theme <id>","phosphor colour"],["speed <id>","stream rate"],["pkg <cmd>","plugins: list/install/remove"],
-  ["agent [topic]","AI/sim analyst report"],["kiosk","toggle stream chrome"],["obs","stream/OBS params"],
+  ["agent [topic]","AI/sim analyst report"],["port","open a monitor pop-out"],["kiosk","toggle stream chrome"],["obs","stream/OBS params"],
   ["reset","restore default settings"],["full","fullscreen"],["clear","wipe screen"],["about","what this is"]];
 function isIp(s){return /^\d{1,3}(\.\d{1,3}){3}$/.test(s||"");}
 function findMake(ip){let t=W.targets.find(x=>x.ip===ip);if(!t){t=makeTarget();if(isIp(ip))t.ip=ip;W.targets.push(t);renderTopo();}return t;}
@@ -375,6 +406,7 @@ function runCmd(raw){
     case"agent":case"ask":case"report":aiAgent(p.slice(1).join(" "));break;
     case"kiosk":toggleKiosk();wl(dim("kiosk "+(document.body.classList.contains("kiosk")?"on — press Esc for setup":"off"))+"\n");break;
     case"obs":case"stream":obsHelp();break;
+    case"port":case"pop":case"popout":popOut();wl(dim("opening a port — new monitor window")+"\n");break;
     default:
       if(PCMDS[c]){try{PCMDS[c].fn(p.slice(1),window.NetGhost.api);}catch(e){wl(red("plugin error: ")+dim(e.message)+"\n");}break;}
       wl(red("ghost: ")+dim(`command not found: ${c}  (try 'help' or 'pkg list')`)+"\n");
@@ -459,6 +491,7 @@ window.NetGhost={
   /* primitives plugins draw with */
   api:{ wl,pri,dim,fg,wht,cyan,amber,red,mag,blue,pad,A,RGB,R,q,
         pushThreat,makeTarget,host,randIP,privIP,W,SERVICES,PORTLIST,USERS,
+        popout:()=>popOut(),
         get PRIMARY(){return PRI;} }
 };
 function enablePlugin(id,quiet){
