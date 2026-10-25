@@ -17,6 +17,8 @@ or leave it in **Auto-Ghost** mode as a monitor display or stream backdrop.
 
 ![icon](build/icon-256.png)
 
+> **New here? Read the [full tutorial](TUTORIAL.md).**
+
 ---
 
 ## Features

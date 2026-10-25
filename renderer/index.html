@@ -203,6 +203,21 @@ body.kiosk #main{border:none;box-shadow:none}
 body.kiosk #main:before,body.kiosk #main:after{display:none}
 body.transparent,body.transparent #main,body.transparent #termhost{background:transparent!important}
 body.transparent #grime,body.transparent #vig,body.transparent #scan{display:none}
+/* packages overlay */
+#pkgwrap{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}
+#pkgwrap.show{display:flex}
+#pkg{width:min(600px,94vw);max-height:88vh;overflow:auto;background:var(--panelbg);border:2px solid var(--primary);box-shadow:6px 6px 0 #000,0 0 0 2px #000}
+#pkg .ph{height:26px;font-size:10px}
+#pkgbody{padding:10px 14px}
+.pkgrow{display:flex;align-items:flex-start;gap:10px;padding:9px 2px;border-bottom:1px dotted var(--line)}
+.pkgmeta{flex:1;min-width:0}
+.pkgname{font-family:var(--crt);font-size:16px;color:var(--fg)}
+.pkgname .pkgid{font-family:var(--pixel);font-size:8px;color:var(--dim);margin-left:6px}
+.pkgon{color:var(--primary)}
+.pkgdesc{font-size:12px;color:var(--dim);margin-top:2px}
+.pkgbits{font-family:var(--pixel);font-size:8px;color:var(--cyan);margin-top:5px;letter-spacing:.3px}
+.pkgrow .b{flex:0 0 auto;align-self:center;min-width:80px;text-align:center}
+#pkg .foot{padding:10px 14px;display:flex;justify-content:flex-end;border-top:2px solid var(--line2)}
 
 @media(max-width:900px){
   #app{grid-template-columns:1fr;grid-template-areas:"top" "main" "right"}
@@ -235,6 +250,7 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
     <div class="panel" id="controls">
       <button class="b" id="b-ghost">▶Ghost</button>
       <button class="b" id="b-cfg">⚙Setup</button>
+      <button class="b" id="b-pkg">⊞ Pkgs</button>
       <button class="b" id="b-pause">⏸Hold</button>
       <button class="b" id="b-pop">⧉Pop</button>
       <button class="b" id="b-full">⛶Full</button>
@@ -287,17 +303,26 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
       <div class="row"><div class="lab">GRIME</div><div class="opts" data-group="grime"></div></div>
       <div class="row"><div class="lab">FLICKER</div><div class="opts" data-group="flicker"></div></div>
       <div class="row"><div class="lab">AUTO-GHOST</div><div class="opts" data-group="ghost"></div></div>
+      <div class="row"><div class="lab">PLUGINS→AUTO</div><div class="opts" data-group="autoplug"></div></div>
       <div class="row"><div class="lab">AI AGENTS</div><div class="opts" data-group="ai"></div></div>
       <div id="airow" style="display:none">
         <div class="row"><div class="lab">API KEY</div><input id="ai-key" type="password" class="cfginput" placeholder="sk-or-v1-…  (OpenRouter)"></div>
         <div class="row"><div class="lab">MODEL</div><input id="ai-model" class="cfginput" placeholder="openai/gpt-4o-mini"></div>
-        <div class="aihint">OpenRouter key, stored locally on this device only — never uploaded. Agents fall back to simulated reports when AI is off or offline. Try <b>agent threat</b> in the console.</div>
+        <div class="aihint">OpenRouter key, stored locally on this device only — never uploaded. Recommended model: <b>openai/gpt-4o-mini</b> or <b>anthropic/claude-3.5-haiku</b> — some free/reasoning models leak their thinking. Agents fall back to simulated reports when AI is off or offline. Try <b>agent threat</b> in the console.</div>
       </div>
     </div>
     <div class="foot">
       <button class="b" id="cfg-reseed">⟳ RESEED WORLD</button>
       <button class="b on" id="cfg-ok">OK · CLOSE</button>
     </div>
+  </div>
+</div>
+
+<div id="pkgwrap">
+  <div id="pkg">
+    <div class="ph"><b>PACKAGES — pkg store</b><div class="btns"><i id="pkg-x">X</i></div></div>
+    <div id="pkgbody"></div>
+    <div class="foot"><button class="b on" id="pkg-ok">CLOSE</button></div>
   </div>
 </div>
 

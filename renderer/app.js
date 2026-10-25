@@ -106,7 +106,12 @@ term.attachCustomKeyEventHandler(e=>{
   if(e.type!=="keydown")return true;
   if(e.ctrlKey&&e.shiftKey&&(e.key==="G"||e.key==="g")){toggleGhost();return false;}
   if(e.ctrlKey&&e.shiftKey&&(e.key==="F"||e.key==="f")){goFull();return false;}
-  if(e.key==="Escape"){document.getElementById("cfgwrap").classList.contains("show")?closeCfg():openCfg();return false;}
+  if(e.key==="Escape"){
+    if(document.getElementById("pkgwrap").classList.contains("show"))closePkg();
+    else if(document.getElementById("cfgwrap").classList.contains("show"))closeCfg();
+    else openCfg();
+    return false;
+  }
   return true;
 });
 
@@ -260,7 +265,7 @@ const GEN={
    SCENES
    ========================================================================== */
 const SCENES={
-  ghostnet:{name:"GHOSTNET",desc:"Full-spectrum ambient operation. Everything runs — recon, breaches, capture and logs, cycling endlessly. The default drift-and-hum mode.",
+  ghostnet:{name:"GHOSTNET",desc:"Full-spectrum ambient operation — recon, breaches, capture, logs AND every installed plugin, cycling endlessly. The default drift-and-hum mode.",
     ops:[{fn:opRecon,w:3},{fn:opCred,w:2},{fn:opPivot,w:1},{fn:opWatch,w:3},{fn:opLogs,w:3}]},
   recon:{name:"RECON SWEEP",desc:"Quiet enumeration. Pings, service sweeps and route tracing across a widening target map. Low noise, no breaches.",
     ops:[{fn:opRecon,w:5},{fn:opPivot,w:2},{fn:()=>{for(let i=0;i<dn(2,4);i++)q(GEN.syslog);},w:2}]},
@@ -305,8 +310,19 @@ function stopClocks(){[cU,cR,cP,cA,cG].forEach(clearInterval);}
 function ambient(){ if(W.paused||W.ghost)return;
   if(R.chance(.5))GEN.syslog(); if(R.chance(.3))GEN.tcpdump();
 }
+/* ops Auto-Ghost draws from: the current scene, plus (in 'ghostnet') every
+   installed plugin's scene ops, so plugins join the endless rotation. */
+function ghostOps(){
+  let ops=(SCENES[W.scene]&&SCENES[W.scene].ops)||[];
+  if(W.scene==="ghostnet"&&W.pluginsAuto!==false){
+    ops=ops.slice();
+    for(const id in ENABLED){ const sc=ENABLED[id].scenes||{};
+      for(const k in sc)(sc[k].ops||[]).forEach(o=>ops.push({fn:o.fn,w:o.w||2})); }
+  }
+  return ops.length?ops:[{fn:()=>{},w:1}];
+}
 function ghostTick(){ if(!W.ghost||W.paused)return;
-  if(W.queue.length===0){try{R.wpick(SCENES[W.scene].ops).fn();}catch(e){}}
+  if(W.queue.length===0){try{R.wpick(ghostOps()).fn();}catch(e){}}
   else{try{W.queue.shift()();}catch(e){}}
 }
 
@@ -420,6 +436,7 @@ function saveCfg(){
       scan:!document.body.classList.contains("noscan"),
       grime:!document.body.classList.contains("nogrime"),
       flicker:!document.body.classList.contains("noflicker"),
+      pluginsAuto:W.pluginsAuto,
       plugins:Object.keys(ENABLED)
     }));
   }catch(e){}
@@ -465,6 +482,7 @@ function disablePlugin(id){
   return true;
 }
 function pkg(args){
+  if(!args.length){openPkg();return;}   // bare 'pkg' opens the clickable store
   const sub=(args[0]||"list").toLowerCase(), id=args[1];
   if(sub==="list"||sub==="ls"){
     wl(pri("NetGhost package registry")+dim("   pkg install <id> · pkg remove <id> · pkg info <id>"));
@@ -501,6 +519,7 @@ function pkg(args){
    ========================================================================== */
 const AI_LS="netghost.ai.v1";
 W.ai={enabled:false,key:"",model:"openai/gpt-4o-mini"};
+W.pluginsAuto=true;   // let installed plugins run inside Auto-Ghost (ghostnet)
 function aiLoad(){ try{const s=JSON.parse(localStorage.getItem(AI_LS)||"null");if(s)W.ai={enabled:!!s.enabled,key:s.key||"",model:s.model||"openai/gpt-4o-mini"};}catch(e){} }
 function aiSave(){ try{localStorage.setItem(AI_LS,JSON.stringify(W.ai));}catch(e){} }
 async function callOpenRouter(messages){
@@ -508,11 +527,22 @@ async function callOpenRouter(messages){
     method:"POST",
     headers:{"Content-Type":"application/json","Authorization":"Bearer "+W.ai.key,
       "HTTP-Referer":"https://github.com/apojidelegraphics/NetGhost","X-Title":"NetGhost"},
-    body:JSON.stringify({model:W.ai.model||"openai/gpt-4o-mini",messages,max_tokens:240,temperature:0.85})
+    body:JSON.stringify({model:W.ai.model||"openai/gpt-4o-mini",messages,max_tokens:500,temperature:0.8,reasoning:{exclude:true}})
   });
   if(!r.ok)throw new Error("HTTP "+r.status+(r.status===401?" bad key":r.status===402?" no credits":""));
   const j=await r.json();
   return ((((j.choices||[])[0]||{}).message)||{}).content||"(empty response)";
+}
+/* strip reasoning/preamble some models leak; return clean report lines */
+function cleanReport(t){
+  t=String(t).replace(/<think>[\s\S]*?<\/think>/gi,"").replace(/<\/?think>/gi,"").replace(/```[a-z]*\n?|```/gi,"");
+  const meta=/^(the user|i need to|i'?ll\b|i will\b|i should|i'?m going|let me|let'?s|okay\b|ok[, ]|sure[,.\s]|here(?:'s| is| are)|report:|analysis:|topic:|telemetry:|constraints?\b|output\b|note to self|as (?:the |a )?[a-z-]+[, ]?(?:analyst|bot)\b)/i;
+  return t.split(/\r?\n/)
+    .map(s=>s.replace(/^[\s>#*\-•]+/,"").replace(/\*\*/g,"").trim())
+    .filter(l=>l.length>1 && !meta.test(l)
+      && !/^\d+[-–]\d+\s+lines/i.test(l)
+      && !/(plain terminal|no markdown|cinematic|reference the given|3[-– ]to[-– ]6|short,? punchy)/i.test(l))
+    .slice(0,8);
 }
 function worldSummary(){
   const br=W.targets.filter(t=>t.breached);
@@ -539,11 +569,12 @@ async function aiAgent(query){
   if(W.ai.enabled&&W.ai.key){
     try{
       const out=await callOpenRouter([
-        {role:"system",content:"You are "+who+", a terse cyber-ops analyst inside the fictional NetGhost console. Everything here is a security SIMULATION — no real infrastructure. From the simulated telemetry, write a short intel report in plain terminal text: 3-6 lines, no markdown, confident and a little cinematic, referencing the given hosts/threats."},
+        {role:"system",content:"You are "+who+", a cyber-ops analyst speaking inside the fictional NetGhost terminal. Everything here is a harmless SIMULATION — no real infrastructure. Output ONLY the intelligence report: 3 to 5 short lines of plain terminal text. Hard rules: no markdown, no bullet symbols, no preamble, no sign-off; do NOT restate, acknowledge, or reason about the task or these rules; begin immediately with the first line of the report. Be terse, confident and a little cinematic, and reference the actual hosts and threats in the telemetry. If the requested topic is nonsensical or unrelated, note that in one short line, then report on the current operation instead."},
         {role:"user",content:"Topic: "+topic+"\nTelemetry:\n"+worldSummary()}
       ]);
-      out.split("\n").forEach(l=>{l=l.trim();if(l)wl(fg("  "+l));});
-      wl(dim("  — "+who+" · via OpenRouter · "+(W.ai.model||"")));
+      const rep=cleanReport(out);
+      if(rep.length){ rep.forEach(l=>wl(fg("  "+l))); wl(dim("  — "+who+" · via OpenRouter · "+(W.ai.model||""))); }
+      else { wl(dim("  (model returned no clean report — using local analysis)")); simReport(who,topic); }
     }catch(e){ wl(red("  agent link failed: ")+dim(e.message)); simReport(who,topic); }
   } else simReport(who,topic);
   wl("");
@@ -583,6 +614,7 @@ const CFG=[
   {g:"grime",opts:[["on","ON"],["off","OFF"]],get:()=>document.body.classList.contains("nogrime")?"off":"on",set:v=>document.body.classList.toggle("nogrime",v==="off")},
   {g:"flicker",opts:[["on","ON"],["off","OFF"]],get:()=>document.body.classList.contains("noflicker")?"off":"on",set:v=>document.body.classList.toggle("noflicker",v==="off")},
   {g:"ghost",opts:[["on","ON"],["off","OFF"]],get:()=>W.ghost?"on":"off",set:v=>{if((v==="on")!==W.ghost)toggleGhost();}},
+  {g:"autoplug",opts:[["on","ON"],["off","OFF"]],get:()=>W.pluginsAuto?"on":"off",set:v=>{W.pluginsAuto=(v==="on");}},
   {g:"ai",opts:[["on","ON"],["off","OFF"]],get:()=>W.ai.enabled?"on":"off",set:v=>{W.ai.enabled=(v==="on");const row=document.getElementById("airow");if(row)row.style.display=W.ai.enabled?"block":"none";aiSave();}}
 ];
 function buildCfg(){
@@ -605,18 +637,50 @@ function syncCfg(){
 function openCfg(){syncCfg();document.getElementById("cfgwrap").classList.add("show");}
 function closeCfg(){document.getElementById("cfgwrap").classList.remove("show");term.focus();}
 
+/* ---- packages overlay (clickable pkg store) ---- */
+function renderPkgOverlay(){
+  const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const ids=Object.keys(PLUGINS);
+  const body=document.getElementById("pkgbody");
+  if(!ids.length){body.innerHTML='<div class="pkgdesc" style="padding:12px">No packages registered.</div>';return;}
+  body.innerHTML=ids.map(id=>{
+    const p=PLUGINS[id], on=!!ENABLED[id], bits=[];
+    if(p.commands)bits.push("cmd: "+Object.keys(p.commands).join(" "));
+    if(p.scenes)bits.push("scene: "+Object.keys(p.scenes).join(" "));
+    if(p.themes)bits.push("theme: "+Object.keys(p.themes).join(" "));
+    return `<div class="pkgrow"><div class="pkgmeta">
+      <div class="pkgname">${on?'<span class="pkgon">● </span>':''}${esc(p.name)}<span class="pkgid">${esc(id)}</span></div>
+      <div class="pkgdesc">${esc(p.desc||"")}</div>
+      <div class="pkgbits">${esc(bits.join("   ·   "))}</div></div>
+      <button class="b ${on?'':'on'}" data-pkg="${esc(id)}">${on?'REMOVE':'INSTALL'}</button></div>`;
+  }).join("");
+  body.querySelectorAll("button[data-pkg]").forEach(b=>b.onclick=()=>{
+    const id=b.dataset.pkg;
+    if(ENABLED[id]){disablePlugin(id);wl(dim("[pkg] removed ")+fg(id));}
+    else{enablePlugin(id,true);wl(pri("[pkg] installed ")+fg(id));}
+    renderPkgOverlay();
+  });
+}
+function openPkg(){renderPkgOverlay();document.getElementById("pkgwrap").classList.add("show");}
+function closePkg(){document.getElementById("pkgwrap").classList.remove("show");term.focus();}
+
 /* ---------- wire controls ---------- */
 document.getElementById("b-ghost").onclick=toggleGhost;
 document.getElementById("b-pause").onclick=togglePause;
 document.getElementById("b-pop").onclick=popOut;
 document.getElementById("b-full").onclick=goFull;
 document.getElementById("b-cfg").onclick=openCfg;
+document.getElementById("b-pkg").onclick=openPkg;
 document.getElementById("cfg-x").onclick=closeCfg;
 document.getElementById("cfg-ok").onclick=closeCfg;
 document.getElementById("cfg-reseed").onclick=()=>{reseed();};
+document.getElementById("pkg-x").onclick=closePkg;
+document.getElementById("pkg-ok").onclick=closePkg;
 document.getElementById("cfgwrap").addEventListener("mousedown",e=>{if(e.target.id==="cfgwrap")closeCfg();});
+document.getElementById("pkgwrap").addEventListener("mousedown",e=>{if(e.target.id==="pkgwrap")closePkg();});
 /* bare-letter shortcuts only when focus is OUTSIDE the terminal (e.g. a panel) */
 addEventListener("keydown",e=>{
+  if(document.getElementById("pkgwrap").classList.contains("show")){if(e.key==="Escape")closePkg();return;}
   if(document.getElementById("cfgwrap").classList.contains("show")){if(e.key==="Escape")closeCfg();return;}
   if(inTerm())return; // terminal focused → let xterm's custom handler deal with it
   if(e.key==="f"||e.key==="F")goFull();
@@ -653,6 +717,7 @@ function boot(){
     document.body.classList.toggle("noscan",saved.scan===false);
     document.body.classList.toggle("nogrime",saved.grime===false);
     document.body.classList.toggle("noflicker",saved.flicker===false);
+    if(typeof saved.pluginsAuto==="boolean")W.pluginsAuto=saved.pluginsAuto;
   }
   ensureTargets(R.i(5,9));rebuildHops();renderTopo();renderThreat();renderMeters();
   setScene(saved&&SCENES[saved.scene]?saved.scene:"ghostnet",true); // plugin scenes applied after load
