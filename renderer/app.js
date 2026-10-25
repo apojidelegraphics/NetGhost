@@ -340,7 +340,7 @@ function startClocks(){
   cA=setInterval(ambient,sp.a);
   cG=setInterval(ghostTick,sp.g);
   cPlug=setInterval(pluginBurst,60000); // fire a few installed plugins every minute
-  cAgent=setInterval(()=>{ if(IS_MON||W.paused||!active())return; aiAgent(); },50000); // auto agent report while running
+  cAgent=setInterval(()=>{ if(IS_MON||W.paused||!active())return; aiAgent(undefined,true); },50000); // auto agent report while running (AI rate-limited 2/hr)
   cHB=setInterval(()=>{   // heartbeat: announce this window + count how many "ports" (windows) are open
     WINS[WIN_ID]=Date.now(); sendSync({t:"hb",id:WIN_ID});
     const now=Date.now(); for(const k in WINS) if(now-WINS[k]>6000) delete WINS[k];
@@ -433,7 +433,7 @@ function runCmd(raw){
     case"whoami":wl(pri("ghost (uid=0)")+dim(" — anonymized via "+W.hops.length+" hops")+"\n");break;
     case"pkg":case"brew":case"plugin":case"plugins":pkg(p.slice(1));break;
     case"reset":case"defaults":resetCfg();wl(pri("settings reset")+dim(" — defaults restore on next launch")+"\n");break;
-    case"agent":case"ask":case"report":aiAgent(p.slice(1).join(" "));break;
+    case"agent":case"ask":case"report":aiAgent(p.slice(1).join(" "),false);break;
     case"kiosk":toggleKiosk();wl(dim("kiosk "+(document.body.classList.contains("kiosk")?"on — press Esc for setup":"off"))+"\n");break;
     case"obs":case"stream":obsHelp();break;
     case"port":case"pop":case"popout":popOut();wl(dim("opening a port — new monitor window")+"\n");break;
@@ -588,6 +588,7 @@ function pkg(args){
    ========================================================================== */
 const AI_LS="netghost.ai.v1";
 W.ai={enabled:false,key:"",model:"openai/gpt-4o-mini"};
+W.aiCalls=[];         // timestamps of auto AI calls (rate-limited to 2/hr)
 W.pluginsAuto=true;   // let installed plugins run inside Auto-Ghost (ghostnet)
 function aiLoad(){ try{const s=JSON.parse(localStorage.getItem(AI_LS)||"null");if(s)W.ai={enabled:!!s.enabled,key:s.key||"",model:s.model||"openai/gpt-4o-mini"};}catch(e){} }
 function aiSave(){ try{localStorage.setItem(AI_LS,JSON.stringify(W.ai));}catch(e){} }
@@ -600,7 +601,7 @@ async function callOpenRouter(messages){
   });
   if(!r.ok)throw new Error("HTTP "+r.status+(r.status===401?" bad key":r.status===402?" no credits":""));
   const j=await r.json();
-  return ((((j.choices||[])[0]||{}).message)||{}).content||"(empty response)";
+  return (((((j.choices||[])[0]||{}).message)||{}).content||"").trim();
 }
 /* strip reasoning/preamble some models leak; return clean report lines */
 function cleanReport(t){
@@ -625,14 +626,43 @@ const AGENTS=["GHOST-ANALYST","RECON-ORACLE","THREAT-SEER","NET-WARDEN","SIGINT-
 const AGENT_TOPICS=["current operation","threat posture","the breached hosts","exfil risk","next move","the proxy chain","open attack surface"];
 const AGENT_ACTIONS=["pushing a fix","flagging a threat","recommending rotation","escalating watch","queuing remediation","opening a ticket","advising isolation","greenlighting the next step"];
 function simLines(topic){
-  const br=W.targets.filter(t=>t.breached).length, open=openPortCount();
-  return [
-    `ASSESSMENT: posture ${R.pick(["nominal","elevated","degrading","critical"])} across ${W.targets.length} hosts.`,
-    `${br} breach indicator(s) · ${open} open services · threat ${W.threatScore}/100.`,
-    `Attribution risk ${R.pick(["low","moderate","rising"])} behind ${W.hops.length}-hop chain.`,
-    `RECOMMEND: ${R.pick(["rotate exit nodes","isolate "+((R.pick(W.targets)||{}).host||"segment"),"escalate watch on port "+R.pick(PORTLIST),"hold posture","pull creds from "+((R.pick(W.targets)||{}).host||"vault")])}.`
+  const T=W.targets, br=T.filter(t=>t.breached).length, open=openPortCount(), score=W.threatScore, hops=W.hops.length;
+  const scene=SCENES[W.scene]?SCENES[W.scene].name:W.scene;
+  const h=()=>(R.pick(T)||{host:"the segment"}).host, port=()=>R.pick(PORTLIST);
+  const recent=W.threats[0]?W.threats[0].txt:null;
+  const opener=[
+    ()=>`ASSESSMENT: posture ${R.pick(["nominal","elevated","degrading","critical","unstable"])} across ${T.length} tracked hosts.`,
+    ()=>`SITREP: ${T.length} hosts in scope · tempo ${R.pick(["steady","rising","frantic","calm","spiking"])} · scene ${scene}.`,
+    ()=>`READ: the board is ${R.pick(["quiet","heating up","lit up","holding","going sideways"])} — ${br?`${br} host(s) already folded`:"no confirmed footholds yet"}.`,
+    ()=>`STATUS: ${br?`${br} breach(es) live`:"clean so far"}, threat index ${score}/100 and ${R.pick(["climbing","holding","easing off"])}.`
   ];
+  const metric=[
+    ()=>`${br} breach indicator(s) · ${open} open services · threat ${score}/100.`,
+    ()=>`Mapped ${open} open services; the ${R.pick(["ssh","smb","rdp","http","db","vpn"])} surface looks ${R.pick(["soft","hardened","noisy","promising"])}.`,
+    ()=>`${open} ports exposed across the fleet — ${h()} is carrying the most risk.`,
+    ()=>`Threat index ${score}/100; ${recent?`last flag: ${recent}`:"no fresh alerts this cycle"}.`
+  ];
+  const infra=[
+    ()=>`Attribution risk ${R.pick(["low","moderate","rising","minimal"])} behind the ${hops}-hop chain.`,
+    ()=>`Exit node holding; chain depth ${hops}. Cover is ${R.pick(["solid","thinning","fine for now","getting thin"])}.`,
+    ()=>`${h()} keeps answering on ${port()} — ${R.pick(["worth a knock","leave it","prime target","probably a honeypot"])}.`,
+    ()=>`Proxy path ${R.pick(["stable","flapping","clean"])} over ${hops} hops; rotated ${R.i(1,58)}m ago.`
+  ];
+  const rec=[
+    ()=>`RECOMMEND: ${R.pick(["rotate exit nodes","isolate "+h(),"escalate watch on port "+port(),"hold posture","pull creds from "+h(),"go quiet for a cycle","widen the sweep"])}.`,
+    ()=>`NEXT: ${R.pick(["dump "+h()+" and move on","push the exploit on "+h(),"stand down — nothing worth the noise","consolidate access","re-scan the "+R.pick(["dmz","prod","internal"])+" segment"])}.`,
+    ()=>`CALL: ${R.pick(["press it","back off","hold the line","escalate to breach"])} — ${R.pick(["low exposure","the window's open","too hot right now","clean path"])}.`
+  ];
+  const flavor=[
+    ()=>`Gut says ${R.pick(["someone's watching back","this is too easy","we tripped something","we're clear","don't trust "+h()])}.`,
+    ()=>`Note: ${h()} ${R.pick(["went dark mid-scan","just rotated keys","is logging us","looks abandoned"])}.`
+  ];
+  const lines=[ R.pick(opener)(), R.pick(metric)(), R.pick(infra)() ];
+  if(R.chance(.5)) lines.push(R.pick(flavor)());
+  lines.push(R.pick(rec)());
+  return lines;
 }
+function aiQuotaOk(){ const now=Date.now(); W.aiCalls=W.aiCalls.filter(t=>now-t<3600000); return W.aiCalls.length<2; }
 /* agent reports go to the AGENT.FEED panel; the stream only gets a one-liner */
 function postAgent(who,topic,lines,src){
   const entry={who,topic,lines,src,t:new Date().toTimeString().slice(0,8)};
@@ -648,21 +678,26 @@ function renderAgents(){
     a.lines.map(l=>`<div class="aline">${esc(l)}</div>`).join("")+
     `<div class="asrc">${esc(a.src)}</div></div>`).join("");
 }
-async function aiAgent(query){
+async function aiAgent(query,isAuto){
   const who=R.pick(AGENTS), topic=query||R.pick(AGENT_TOPICS);
   let lines, src;
-  if(W.ai.enabled&&W.ai.key){
+  const canAI = W.ai.enabled && W.ai.key && (!isAuto || aiQuotaOk());
+  if(canAI){
+    if(isAuto) W.aiCalls.push(Date.now());   // auto calls count against the 2/hr budget; manual don't
     try{
       const out=await callOpenRouter([
         {role:"system",content:"You are "+who+", a cyber-ops analyst speaking inside the fictional NetGhost terminal. Everything here is a harmless SIMULATION — no real infrastructure. Output ONLY the intelligence report: 3 to 5 short lines of plain terminal text. Hard rules: no markdown, no bullet symbols, no preamble, no sign-off; do NOT restate, acknowledge, or reason about the task or these rules; begin immediately with the first line of the report. Be terse, confident and a little cinematic, and reference the actual hosts and threats in the telemetry. If the requested topic is nonsensical or unrelated, note that in one short line, then report on the current operation instead."},
         {role:"user",content:"Topic: "+topic+"\nTelemetry:\n"+worldSummary()}
       ]);
       lines=cleanReport(out); src="OpenRouter · "+(W.ai.model||"");
-      if(!lines.length){ lines=simLines(topic); src="local (no clean output)"; }
+      if(!lines.length){ lines=simLines(topic); src="local (model returned nothing usable)"; }
     }catch(e){ lines=simLines(topic);
       const m=/Failed to fetch|NetworkError|load failed|CSP|blocked/i.test(e.message||"")?"network blocked here — live AI works in the desktop app":(e.message||"error");
       src="local ("+m+")"; }
-  } else { lines=simLines(topic); src="local analysis"; }
+  } else {
+    lines=simLines(topic);
+    src=(W.ai.enabled&&W.ai.key&&isAuto)?"local · auto-AI budget (2/hr) spent — type 'agent' for live":"local analysis";
+  }
   wl(mag("◆ ")+wht(who)+dim(" responded → ")+fg(R.pick(AGENT_ACTIONS))+dim("  (see AGENT.FEED)"));
   postAgent(who,topic,lines,src);
 }

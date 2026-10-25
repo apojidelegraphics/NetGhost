@@ -1,56 +1,78 @@
-# NetGhost
+<div align="center">
 
-**An ambient network & security terminal engine — a "networking solution for all."**
-By Apoji_Delegraphics.
+# 👻 NetGhost
 
-NetGhost is a procedural, endless, realistic-*looking* security console. It streams
-fake port scans, packet captures, credential audits and syslog feeds — driven by a
-seeded procedural engine — and renders them in an authentic Xterm.js terminal wrapped
-in a worn, cobbled-together BBS/industrial dashboard. Run it as an interactive console,
-or leave it in **Auto-Ghost** mode as a monitor display or stream backdrop.
+### An ambient network &amp; security terminal — a "hacker screen" you can actually drive.
 
-> ### ⚠️ This is a simulation. It is not a hacking tool.
-> NetGhost performs **no real network activity whatsoever**. Every IP, host, packet,
-> port, and credential on screen is pseudo-randomly generated text produced locally in
-> the renderer. It opens no sockets, contacts no hosts, scans nothing, and sends
-> nothing. It is theatre — like a movie "hacker screen" — for displays, demos, and streams.
+*A networking solution for all, by Apoji_Delegraphics.*
 
-![icon](build/icon-256.png)
-
-> **New here? Read the [full tutorial](TUTORIAL.md).**
+</div>
 
 ---
 
-## Features
+NetGhost fills your screen with a living cyber-ops console: port scans, packet captures,
+credential audits, proxy hops, cluster churn, and streams of system logs — all generated
+on the fly by a procedural engine and rendered in a worn, 90s-terminal dashboard. Type
+commands yourself, or hit one button and let it run itself as a monitor display or stream
+backdrop.
 
-- **Xterm.js terminal** — authentic emulation with a real interactive prompt (type `help`), command history (↑/↓), tab-complete, `Ctrl+C`/`Ctrl+L`.
-- **Procedural engine** — seeded RNG generates subnets, hostnames (`vault-us-east-3.internal`), services/versions, CVEs, and proxy chains. Reseed any time for a fresh world.
-- **Async stream generators** — `nmap` sweeps, `hydra` credential audits, `tcpdump` hex captures, `tail -f` syslog, `traceroute`, SYN-flood scrubbing, privilege-escalation chains.
-- **Preset scenes** — switch the whole mood:
-  - `GHOSTNET` — full-spectrum ambient drift (default)
-  - `RECON` — quiet enumeration, no breaches
-  - `RED-TEAM` — aggressive scan → crack → root → exfil, threat climbs fast
-  - `DDoS` — defensive scrubbing console under volumetric load
-  - `SOC` — calm blue-team watch floor
-- **Config panel** (`Setup` / `Esc`) — scene, phosphor colour (green/amber/cyan/magenta/mono), stream **speed**, **density**, and toggles for scanlines, grime, and flicker. **Your setup is saved** and restored on next launch (`reset` to clear).
-- **Plugins** — an extension system with a homebrew-style package manager. `pkg list` / `pkg install <id>` / `pkg remove <id>`; installed plugins are remembered across launches. Built-ins: `cryptominer`, `wardrive`, `scada`, `jklinger` (Kubernetes), `hph` (n8n), `wharf` (Docker), `satcom` (satellite/SDR), `mainframe` (retro z/OS), `videowall` (opens pop-outs), `coffee`. Installed plugins join the Auto-Ghost rotation, and a **plugin sweep runs a few of them every minute** so you always see them working. Each can add commands, scenes, themes — see `renderer/plugins.js` to write your own.
-- **AI agents** (optional) — enable in Setup and paste an [OpenRouter](https://openrouter.ai) key to have analyst agents (`agent [topic]`) write live intel reports on the current telemetry. The key is stored only in local storage on your device. With AI off or offline, agents emit a procedurally-generated report instead, so the command always works.
-- **Stream / OBS mode** — URL params preset and strip the UI for use as an OBS browser source: `?scene=redteam&theme=amber&speed=fast`, `?ghost=1` (auto-engage), `?kiosk=1` (terminal only, no chrome), `?transparent=1` (transparent background for an overlay). The `kiosk` command toggles chrome live; `obs` prints the list.
-- **Dashboard** — proxy hop chain, live target topology, system-load meters, escalating threat matrix.
-- **Fullscreen** and **multi-monitor pop-out** — spawn extra ambient monitor windows (`New Monitor Window` / the `Pop` button) and drag them to other screens.
+> ## ⚠️ It's a simulation — not a hacking tool.
+> NetGhost performs **no real network activity whatsoever**. Every IP, host, packet, port,
+> and "cracked" password on screen is random text generated locally. It opens no
+> connections, scans nothing, and sends nothing. It's theatre — like the hacker screens in
+> movies — for displays, demos, dashboards, and streams.
 
-## Commands
+<div align="center">
 
-`help` · `scan [ip]` · `nmap <ip>` · `ping [ip]` · `trace [ip]` · `hydra [ip]` · `sniff` ·
-`syslog` · `scene <id>` · `theme <id>` · `speed <id>` · `pkg <cmd>` · `agent [topic]` ·
-`kiosk` · `obs` · `ghost` · `targets` · `hops` · `setup` · `reseed [n]` · `pause` · `reset` ·
-`full` · `clear` · `about`
+![NetGhost](build/icon-256.png)
 
-Plus any commands added by installed plugins (e.g. `mine`, `wifi`, `scada`, `jk`, `hph`, `coffee`).
+</div>
 
-## Writing a plugin
+## ✨ What it does
 
-Plugins live in `renderer/plugins.js` and register through a small API:
+- 🖥️ **A real terminal** (Xterm.js) with an interactive prompt — type commands, history, tab-complete.
+- 🌐 **Procedural everything** — subnets, hostnames, services, CVEs and proxy chains, all seeded and reproducible.
+- 📡 **Live stream generators** — nmap sweeps, hydra credential audits, tcpdump hex, `tail -f` syslog, traceroute, DDoS scrubbing and more.
+- 🎬 **Preset scenes** — Recon, Red-Team Breach, DDoS Mitigation, SOC Monitor, and full-spectrum GhostNet.
+- 🧩 **Plugins** — a homebrew-style package manager and store. Add Docker (WharF), Kubernetes (Jklinger), n8n (hPh), crypto mining, wi-fi wardriving, satellite, mainframe, and more — or write your own.
+- 🤖 **AI analyst agents** (optional) — plug in an OpenRouter key and agents post live intel reports into their own panel; a rich simulated fallback runs with no key needed.
+- 📺 **Stream / OBS mode** — kiosk and transparent modes plus URL presets, so it drops straight into OBS as a backdrop.
+- 🖥️🖥️ **Multi-monitor** — pop out extra "Port" windows and spread them across screens; system load stays in sync across all of them.
+- 💾 **Remembers your setup** — scene, theme, speed and plugins persist between launches.
+
+## 📥 Download
+
+Grab the latest installer for your OS from the **[Releases page](https://github.com/apojidelegraphics/NetGhost/releases)**:
+
+| Platform | File |
+|---|---|
+| **macOS** | `NetGhost-x.y.z-universal.dmg` |
+| **Windows** | `NetGhost-Setup-x.y.z.exe` (installer) or `NetGhost-x.y.z.exe` (portable) |
+| **Linux** | `NetGhost-x.y.z.AppImage` or `netghost_x.y.z_amd64.deb` |
+
+> Builds are currently **unsigned**, so macOS Gatekeeper and Windows SmartScreen will warn
+> you on first launch — that's expected for unsigned apps, not a real threat. See the
+> [tutorial](TUTORIAL.md#14-troubleshooting) for how to open them.
+
+## 🚀 Your first two minutes
+
+Launch NetGhost, click the terminal, and try:
+
+```
+ghost v_start3     begin the ambient stream
+scan               sweep a random host — watch the ports light up
+pkg                open the plugin store and install a few
+ghost              turn on Auto-Ghost and let it run itself
+agent threat       get an analyst report
+```
+
+Press **Esc** for Setup, **⛶ Full** for fullscreen, **⧉ Port** to pop out a second screen.
+The **[full tutorial](TUTORIAL.md)** walks through every feature.
+
+## 🧩 Writing a plugin
+
+Plugins live in `renderer/plugins.js` and register through a tiny API — they can add
+commands, scenes and themes:
 
 ```js
 window.NetGhost.registerPlugin({
@@ -58,72 +80,32 @@ window.NetGhost.registerPlugin({
   name: "My Plugin",
   desc: "what it does",
   commands: { hello: (args, api) => api.wl(api.pri("hi from my plugin")) },
-  scenes:   { myscene: { name:"MY SCENE", desc:"…", ops:[{ fn:()=>{}, w:3 }] } },
-  themes:   { mytheme: { rgb:[255,0,128], vars:{ "--primary":"#ff0080" } } }
+  scenes:   { myscene: { name: "MY SCENE", desc: "…", ops: [{ fn: () => {}, w: 3 }] } }
 });
 ```
 
-The engine hands every command and scene op an `api` with drawing helpers
-(`wl`, `pri`, `dim`, `fg`, `amber`, `red`, …), the seeded RNG (`api.R`), the
-world state (`api.W`), `api.q` to queue paced steps, and `api.pushThreat`.
-Install with `pkg install myplugin`.
+Install it in-app with `pkg install myplugin`. Full details in the [tutorial](TUTORIAL.md#9-plugins-the-pkg-store).
 
-## Hotkeys
-
-`Esc` config · `Ctrl+Shift+G` toggle Auto-Ghost · `Ctrl+Shift+F` fullscreen · `↑/↓` history ·
-`Ctrl+C` cancel line · `Ctrl+L` clear. (Bare `G`/`F`/`Esc` also work when the terminal
-isn't focused, e.g. after clicking a side panel.) Everything is also reachable via the
-top-right buttons and typed commands (`ghost`, `full`, `setup`).
-
----
-
-## Run from source
+## 🛠️ Run &amp; build from source
 
 ```bash
 npm install
-npm start
+npm start          # run it
+npm run dist       # build installers for your OS → release/
 ```
 
-## Build installers
-
-Uses [electron-builder](https://www.electron.build/). Output lands in `release/`.
+Pushing a version tag builds all three platforms and publishes a GitHub Release with notes:
 
 ```bash
-npm run dist          # current OS
-npm run dist:mac      # macOS  .dmg + .zip (universal)
-npm run dist:win      # Windows NSIS installer + portable .exe
-npm run dist:linux    # AppImage + .deb
+npm version patch   # bumps version + creates the tag
+git push && git push --tags
 ```
 
-## Cut a GitHub release
+## 📓 More
 
-The repo ships a workflow at `.github/workflows/release.yml` that builds for macOS,
-Windows and Linux and attaches the installers to a GitHub Release whenever you push a
-version tag:
+- **[TUTORIAL.md](TUTORIAL.md)** — the complete guide.
+- **[CHANGELOG.md](CHANGELOG.md)** — what changed in each version.
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-(The workflow uses the automatically-provided `GITHUB_TOKEN`; no secrets to configure
-for unsigned builds. Code-signing certificates are optional — add them as repo secrets
-when you're ready to ship signed builds.)
-
-## Project layout
-
-```
-netghost/
-├─ main.js                 Electron main process (windows, menu, pop-out IPC)
-├─ preload.js              safe bridge → window.netghost
-├─ renderer/
-│  ├─ index.html           dashboard shell + styling
-│  ├─ app.js               engine: RNG, generators, scenes, terminal, config
-│  └─ vendor/              bundled Xterm.js (offline, no CDN needed)
-├─ build/icon.png          app icon
-└─ .github/workflows/release.yml
-```
-
-## License
+## 📄 License
 
 MIT © Apoji_Delegraphics — see [LICENSE](LICENSE).
