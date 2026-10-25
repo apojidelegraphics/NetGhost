@@ -191,6 +191,18 @@ body.noflicker #flick{display:none}
 .opt.sel:before{content:"\25BA "}
 #cfg .foot{padding:12px 16px;display:flex;gap:8px;justify-content:flex-end;border-top:2px solid var(--line2)}
 .scenedesc{font-size:12px;color:var(--dim);padding:8px 0 2px;min-height:34px;border-bottom:1px dotted var(--line)}
+.cfginput{flex:1;background:#000;border:2px solid var(--line2);color:var(--fg);font-family:var(--mono);font-size:12px;padding:5px 7px;outline:none;box-shadow:2px 2px 0 #000}
+.cfginput:focus{border-color:var(--primary)}
+.aihint{font-size:11px;color:var(--dim);padding:7px 2px 2px;line-height:1.5}
+.aihint b{color:var(--primary)}
+#airow{border-top:1px dotted var(--line);margin-top:2px}
+/* kiosk / stream-overlay modes */
+body.kiosk #top,body.kiosk #left,body.kiosk #right{display:none}
+body.kiosk #app{grid-template-columns:1fr;grid-template-rows:1fr;grid-template-areas:"main";padding:0;gap:0}
+body.kiosk #main{border:none;box-shadow:none}
+body.kiosk #main:before,body.kiosk #main:after{display:none}
+body.transparent,body.transparent #main,body.transparent #termhost{background:transparent!important}
+body.transparent #grime,body.transparent #vig,body.transparent #scan{display:none}
 
 @media(max-width:900px){
   #app{grid-template-columns:1fr;grid-template-areas:"top" "main" "right"}
@@ -275,6 +287,12 @@ body.noflicker #flick{display:none}
       <div class="row"><div class="lab">GRIME</div><div class="opts" data-group="grime"></div></div>
       <div class="row"><div class="lab">FLICKER</div><div class="opts" data-group="flicker"></div></div>
       <div class="row"><div class="lab">AUTO-GHOST</div><div class="opts" data-group="ghost"></div></div>
+      <div class="row"><div class="lab">AI AGENTS</div><div class="opts" data-group="ai"></div></div>
+      <div id="airow" style="display:none">
+        <div class="row"><div class="lab">API KEY</div><input id="ai-key" type="password" class="cfginput" placeholder="sk-or-v1-…  (OpenRouter)"></div>
+        <div class="row"><div class="lab">MODEL</div><input id="ai-model" class="cfginput" placeholder="openai/gpt-4o-mini"></div>
+        <div class="aihint">OpenRouter key, stored locally on this device only — never uploaded. Agents fall back to simulated reports when AI is off or offline. Try <b>agent threat</b> in the console.</div>
+      </div>
     </div>
     <div class="foot">
       <button class="b" id="cfg-reseed">⟳ RESEED WORLD</button>
@@ -284,5 +302,6 @@ body.noflicker #flick{display:none}
 </div>
 
 <script src="app.js"></script>
+<script src="plugins.js"></script>
 </body>
 </html>

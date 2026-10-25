@@ -30,15 +30,41 @@ or leave it in **Auto-Ghost** mode as a monitor display or stream backdrop.
   - `RED-TEAM` — aggressive scan → crack → root → exfil, threat climbs fast
   - `DDoS` — defensive scrubbing console under volumetric load
   - `SOC` — calm blue-team watch floor
-- **Config panel** (`Setup` / `Esc`) — scene, phosphor colour (green/amber/cyan/magenta/mono), stream **speed**, **density**, and toggles for scanlines, grime, and flicker.
+- **Config panel** (`Setup` / `Esc`) — scene, phosphor colour (green/amber/cyan/magenta/mono), stream **speed**, **density**, and toggles for scanlines, grime, and flicker. **Your setup is saved** and restored on next launch (`reset` to clear).
+- **Plugins** — an extension system with a homebrew-style package manager. `pkg list` / `pkg install <id>` / `pkg remove <id>`; installed plugins are remembered across launches. Built-ins: `cryptominer`, `wardrive`, `scada`, `jklinger` (Kubernetes-style cluster), `hph` (n8n-style workflow automation), `coffee`. Each can add commands, scenes, themes — see `renderer/plugins.js` to write your own.
+- **AI agents** (optional) — enable in Setup and paste an [OpenRouter](https://openrouter.ai) key to have analyst agents (`agent [topic]`) write live intel reports on the current telemetry. The key is stored only in local storage on your device. With AI off or offline, agents emit a procedurally-generated report instead, so the command always works.
+- **Stream / OBS mode** — URL params preset and strip the UI for use as an OBS browser source: `?scene=redteam&theme=amber&speed=fast`, `?ghost=1` (auto-engage), `?kiosk=1` (terminal only, no chrome), `?transparent=1` (transparent background for an overlay). The `kiosk` command toggles chrome live; `obs` prints the list.
 - **Dashboard** — proxy hop chain, live target topology, system-load meters, escalating threat matrix.
 - **Fullscreen** and **multi-monitor pop-out** — spawn extra ambient monitor windows (`New Monitor Window` / the `Pop` button) and drag them to other screens.
 
 ## Commands
 
 `help` · `scan [ip]` · `nmap <ip>` · `ping [ip]` · `trace [ip]` · `hydra [ip]` · `sniff` ·
-`syslog` · `scene <id>` · `theme <id>` · `speed <id>` · `ghost` · `targets` · `hops` ·
-`setup` · `reseed [n]` · `pause` · `full` · `clear` · `about`
+`syslog` · `scene <id>` · `theme <id>` · `speed <id>` · `pkg <cmd>` · `agent [topic]` ·
+`kiosk` · `obs` · `ghost` · `targets` · `hops` · `setup` · `reseed [n]` · `pause` · `reset` ·
+`full` · `clear` · `about`
+
+Plus any commands added by installed plugins (e.g. `mine`, `wifi`, `scada`, `jk`, `hph`, `coffee`).
+
+## Writing a plugin
+
+Plugins live in `renderer/plugins.js` and register through a small API:
+
+```js
+window.NetGhost.registerPlugin({
+  id: "myplugin",
+  name: "My Plugin",
+  desc: "what it does",
+  commands: { hello: (args, api) => api.wl(api.pri("hi from my plugin")) },
+  scenes:   { myscene: { name:"MY SCENE", desc:"…", ops:[{ fn:()=>{}, w:3 }] } },
+  themes:   { mytheme: { rgb:[255,0,128], vars:{ "--primary":"#ff0080" } } }
+});
+```
+
+The engine hands every command and scene op an `api` with drawing helpers
+(`wl`, `pri`, `dim`, `fg`, `amber`, `red`, …), the seeded RNG (`api.R`), the
+world state (`api.W`), `api.q` to queue paced steps, and `api.pushThreat`.
+Install with `pkg install myplugin`.
 
 ## Hotkeys
 

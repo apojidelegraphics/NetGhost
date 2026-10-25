@@ -317,7 +317,9 @@ const HELP=[["help","this list"],["scan [ip]","nmap-style sweep"],["nmap <ip>","
   ["trace [ip]","route via proxy chain"],["hydra [ip]","credential audit"],["sniff","dump packets"],["syslog","tail log feed"],
   ["scene <id>","switch scene (recon/redteam/ddos/soc/ghostnet)"],["ghost","toggle auto-ghost"],["targets","list hosts"],
   ["hops","rebuild proxy chain"],["setup","open config"],["reseed [n]","regen world"],["pause","freeze streams"],
-  ["theme <id>","phosphor colour"],["speed <id>","stream rate"],["full","fullscreen"],["clear","wipe screen"],["about","what this is"]];
+  ["theme <id>","phosphor colour"],["speed <id>","stream rate"],["pkg <cmd>","plugins: list/install/remove"],
+  ["agent [topic]","AI/sim analyst report"],["kiosk","toggle stream chrome"],["obs","stream/OBS params"],
+  ["reset","restore default settings"],["full","fullscreen"],["clear","wipe screen"],["about","what this is"]];
 function isIp(s){return /^\d{1,3}(\.\d{1,3}){3}$/.test(s||"");}
 function findMake(ip){let t=W.targets.find(x=>x.ip===ip);if(!t){t=makeTarget();if(isIp(ip))t.ip=ip;W.targets.push(t);renderTopo();}return t;}
 function runCmd(raw){
@@ -352,7 +354,14 @@ function runCmd(raw){
     case"full":case"fullscreen":goFull();break;
     case"clear":case"cls":term.clear();break;
     case"whoami":wl(pri("ghost (uid=0)")+dim(" — anonymized via "+W.hops.length+" hops")+"\n");break;
-    default:wl(red("ghost: ")+dim(`command not found: ${c}  (try 'help')`)+"\n");
+    case"pkg":case"brew":case"plugin":case"plugins":pkg(p.slice(1));break;
+    case"reset":case"defaults":resetCfg();wl(pri("settings reset")+dim(" — defaults restore on next launch")+"\n");break;
+    case"agent":case"ask":case"report":aiAgent(p.slice(1).join(" "));break;
+    case"kiosk":toggleKiosk();wl(dim("kiosk "+(document.body.classList.contains("kiosk")?"on — press Esc for setup":"off"))+"\n");break;
+    case"obs":case"stream":obsHelp();break;
+    default:
+      if(PCMDS[c]){try{PCMDS[c].fn(p.slice(1),window.NetGhost.api);}catch(e){wl(red("plugin error: ")+dim(e.message)+"\n");}break;}
+      wl(red("ghost: ")+dim(`command not found: ${c}  (try 'help' or 'pkg list')`)+"\n");
   }
 }
 
@@ -401,6 +410,168 @@ function popOut(){
 }
 
 /* ============================================================================
+   CONFIG PERSISTENCE  (localStorage — works in Electron renderer & browser)
+   ========================================================================== */
+const CFG_KEY="netghost.cfg.v1";
+function saveCfg(){
+  try{
+    localStorage.setItem(CFG_KEY,JSON.stringify({
+      theme:W.theme, scene:W.scene, speed:W.speed, density:W.density,
+      scan:!document.body.classList.contains("noscan"),
+      grime:!document.body.classList.contains("nogrime"),
+      flicker:!document.body.classList.contains("noflicker"),
+      plugins:Object.keys(ENABLED)
+    }));
+  }catch(e){}
+}
+function loadCfg(){ try{return JSON.parse(localStorage.getItem(CFG_KEY)||"null");}catch(e){return null;} }
+function resetCfg(){ try{localStorage.removeItem(CFG_KEY);}catch(e){} }
+
+/* ============================================================================
+   PLUGIN SYSTEM  +  homebrew-style package manager
+   A plugin may contribute: commands{}, scenes{}, themes{}, onEnable/onDisable.
+   Register from plugins.js (or your own file) via window.NetGhost.registerPlugin.
+   ========================================================================== */
+const PLUGINS={};   // id -> def (catalog, available)
+const ENABLED={};   // id -> def (currently installed/active)
+const PCMDS={};     // command name -> {fn, plugin}
+window.NetGhost={
+  version:"1.0",
+  registerPlugin(def){ if(def&&def.id) PLUGINS[def.id]=def; },
+  list(){ return Object.keys(PLUGINS); },
+  /* primitives plugins draw with */
+  api:{ wl,pri,dim,fg,wht,cyan,amber,red,mag,blue,pad,A,RGB,R,q,
+        pushThreat,makeTarget,host,randIP,privIP,W,SERVICES,PORTLIST,USERS,
+        get PRIMARY(){return PRI;} }
+};
+function enablePlugin(id,quiet){
+  const d=PLUGINS[id]; if(!d||ENABLED[id])return false;
+  if(d.scenes)for(const k in d.scenes)SCENES[k]=d.scenes[k];
+  if(d.themes)for(const k in d.themes)THEMES[k]=d.themes[k];
+  if(d.commands)for(const k in d.commands)PCMDS[k.toLowerCase()]={fn:d.commands[k],plugin:id};
+  ENABLED[id]=d;
+  if(d.onEnable)try{d.onEnable(window.NetGhost.api);}catch(e){}
+  if(!quiet)wl(pri("[pkg] ")+wht(d.name)+dim(" installed"+(d.commands?"  commands: "+Object.keys(d.commands).join(" "):"")));
+  saveCfg();
+  return true;
+}
+function disablePlugin(id){
+  const d=ENABLED[id]; if(!d)return false;
+  if(d.scenes)for(const k in d.scenes){ if(W.scene===k)setScene("ghostnet",true); delete SCENES[k]; }
+  if(d.themes)for(const k in d.themes){ if(W.theme===k)applyTheme("green"); delete THEMES[k]; }
+  if(d.commands)for(const k in d.commands)delete PCMDS[k.toLowerCase()];
+  if(d.onDisable)try{d.onDisable();}catch(e){}
+  delete ENABLED[id]; saveCfg();
+  return true;
+}
+function pkg(args){
+  const sub=(args[0]||"list").toLowerCase(), id=args[1];
+  if(sub==="list"||sub==="ls"){
+    wl(pri("NetGhost package registry")+dim("   pkg install <id> · pkg remove <id> · pkg info <id>"));
+    const ids=Object.keys(PLUGINS);
+    if(!ids.length)wl(dim("  (no packages registered)"));
+    ids.forEach(k=>{const p=PLUGINS[k];wl("  "+(ENABLED[k]?pri("[✓] "):dim("[ ] "))+wht(pad(p.id,13))+dim(p.desc));});
+    wl(""); return;
+  }
+  if(sub==="info"){ const p=PLUGINS[id]; if(!p){wl(red("no such package: "+(id||""))+"\n");return;}
+    wl(pri(p.name)+dim("  ("+p.id+")")); wl(dim("  "+p.desc));
+    if(p.commands)wl(dim("  commands: ")+fg(Object.keys(p.commands).join(" ")));
+    if(p.scenes)wl(dim("  scenes:   ")+fg(Object.keys(p.scenes).join(" ")));
+    if(p.themes)wl(dim("  themes:   ")+fg(Object.keys(p.themes).join(" ")));
+    wl(dim("  status:   ")+(ENABLED[id]?pri("installed"):dim("available"))); wl(""); return;
+  }
+  if(sub==="install"||sub==="add"||sub==="i"){
+    if(!PLUGINS[id]){wl(red("no such package: "+(id||""))+dim("   (try 'pkg list')")+"\n");return;}
+    if(ENABLED[id]){wl(dim(id+" is already installed")+"\n");return;}
+    wl(dim("==> Fetching ")+wht(id)); wl(dim("==> Pouring ")+wht(id)+dim(" into ghost-core…"));
+    enablePlugin(id); wl(pri("[beer] ")+fg(id+" installed")+dim("  — enabled & saved")); wl(""); return;
+  }
+  if(sub==="remove"||sub==="rm"||sub==="uninstall"){
+    if(disablePlugin(id))wl(dim("==> Uninstalling "+id)+"  "+pri("done")+"\n");
+    else wl(red((id||"")+" is not installed")+"\n");
+    return;
+  }
+  wl(dim("pkg: list · info <id> · install <id> · remove <id>")+"\n");
+}
+
+/* ============================================================================
+   AI AGENTS (optional OpenRouter)  +  STREAM / OBS modes
+   AI is OFF by default. When enabled with a key, agents call OpenRouter;
+   otherwise they emit a simulated report. The key lives only in localStorage.
+   ========================================================================== */
+const AI_LS="netghost.ai.v1";
+W.ai={enabled:false,key:"",model:"openai/gpt-4o-mini"};
+function aiLoad(){ try{const s=JSON.parse(localStorage.getItem(AI_LS)||"null");if(s)W.ai={enabled:!!s.enabled,key:s.key||"",model:s.model||"openai/gpt-4o-mini"};}catch(e){} }
+function aiSave(){ try{localStorage.setItem(AI_LS,JSON.stringify(W.ai));}catch(e){} }
+async function callOpenRouter(messages){
+  const r=await fetch("https://openrouter.ai/api/v1/chat/completions",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+W.ai.key,
+      "HTTP-Referer":"https://github.com/apojidelegraphics/NetGhost","X-Title":"NetGhost"},
+    body:JSON.stringify({model:W.ai.model||"openai/gpt-4o-mini",messages,max_tokens:240,temperature:0.85})
+  });
+  if(!r.ok)throw new Error("HTTP "+r.status+(r.status===401?" bad key":r.status===402?" no credits":""));
+  const j=await r.json();
+  return ((((j.choices||[])[0]||{}).message)||{}).content||"(empty response)";
+}
+function worldSummary(){
+  const br=W.targets.filter(t=>t.breached);
+  return [
+    `scene=${SCENES[W.scene]?SCENES[W.scene].name:W.scene} hosts=${W.targets.length} breached=${br.length} threat=${W.threatScore}/100 hops=${W.hops.length}`,
+    "hosts: "+W.targets.slice(0,6).map(t=>`${t.host}(${t.ports.filter(p=>p.state==="open").length}open${t.breached?",BREACHED":""})`).join(", "),
+    "recent: "+(W.threats.slice(0,4).map(t=>t.txt).join(" | ")||"none")
+  ].join("\n");
+}
+const AGENTS=["GHOST-ANALYST","RECON-ORACLE","THREAT-SEER","NET-WARDEN","SIGINT-BOT"];
+function simReport(who,topic){
+  const br=W.targets.filter(t=>t.breached).length;
+  const open=W.targets.reduce((a,t)=>a+t.ports.filter(p=>p.state==="open").length,0);
+  [ `ASSESSMENT: posture ${R.pick(["nominal","elevated","degrading","critical"])} across ${W.targets.length} hosts.`,
+    `${br} breach indicator(s) · ${open} open services · threat ${W.threatScore}/100.`,
+    `Attribution risk ${R.pick(["low","moderate","rising"])} behind ${W.hops.length}-hop chain.`,
+    `RECOMMEND: ${R.pick(["rotate exit nodes","isolate "+((R.pick(W.targets)||{}).host||"segment"),"escalate watch on port "+R.pick(PORTLIST),"hold posture","pull creds from "+((R.pick(W.targets)||{}).host||"vault")])}.`
+  ].forEach(l=>wl(fg("  "+l)));
+  wl(dim("  — "+who+" · simulated (enable AI in setup for live analysis)"));
+}
+async function aiAgent(query){
+  const who=R.pick(AGENTS), topic=query||"current operation";
+  wl(mag("◆ AGENT ")+wht(who)+dim(" · analyzing "+topic+" …"));
+  if(W.ai.enabled&&W.ai.key){
+    try{
+      const out=await callOpenRouter([
+        {role:"system",content:"You are "+who+", a terse cyber-ops analyst inside the fictional NetGhost console. Everything here is a security SIMULATION — no real infrastructure. From the simulated telemetry, write a short intel report in plain terminal text: 3-6 lines, no markdown, confident and a little cinematic, referencing the given hosts/threats."},
+        {role:"user",content:"Topic: "+topic+"\nTelemetry:\n"+worldSummary()}
+      ]);
+      out.split("\n").forEach(l=>{l=l.trim();if(l)wl(fg("  "+l));});
+      wl(dim("  — "+who+" · via OpenRouter · "+(W.ai.model||"")));
+    }catch(e){ wl(red("  agent link failed: ")+dim(e.message)); simReport(who,topic); }
+  } else simReport(who,topic);
+  wl("");
+}
+/* ----- stream / OBS ----- */
+function setKiosk(on){ document.body.classList.toggle("kiosk",on); try{fit.fit();}catch(e){} }
+function setTransparent(on){ document.body.classList.toggle("transparent",on); term.options.theme={...term.options.theme,background:on?"rgba(0,0,0,0)":"#07070a"}; }
+function toggleKiosk(){ setKiosk(!document.body.classList.contains("kiosk")); }
+function applyParams(){
+  const hashQ=location.hash.includes("?")?location.hash.split("?")[1]:"";
+  const q=new URLSearchParams(location.search+(hashQ?"&"+hashQ:"")); const g=k=>q.get(k);
+  if(THEMES[g("theme")])applyTheme(g("theme"));
+  if(SCENES[g("scene")])setScene(g("scene"),true);
+  if(SPEEDS[g("speed")]){W.speed=g("speed");startClocks();}
+  if(g("transparent")==="1")setTransparent(true);
+  if(g("kiosk")==="1")setKiosk(true);
+  if(g("ghost")==="1")setTimeout(()=>{if(!W.ghost)toggleGhost();},1600);
+}
+function obsHelp(){
+  wl(pri("Stream / OBS mode")+dim("  — append URL params (great as an OBS browser source):"));
+  wl(dim("  ?scene=redteam&theme=amber&speed=fast")+dim("   preset the look"));
+  wl(dim("  ?ghost=1")+dim("        auto-engage Auto-Ghost"));
+  wl(dim("  ?kiosk=1")+dim("        hide all chrome — terminal only"));
+  wl(dim("  ?transparent=1")+dim("  transparent background for an overlay"));
+  wl(dim("  console: ")+fg("kiosk")+dim(" toggles chrome anytime"));wl("");
+}
+
+/* ============================================================================
    CONFIG PANEL
    ========================================================================== */
 const CFG=[
@@ -411,7 +582,8 @@ const CFG=[
   {g:"scan",opts:[["on","ON"],["off","OFF"]],get:()=>document.body.classList.contains("noscan")?"off":"on",set:v=>document.body.classList.toggle("noscan",v==="off")},
   {g:"grime",opts:[["on","ON"],["off","OFF"]],get:()=>document.body.classList.contains("nogrime")?"off":"on",set:v=>document.body.classList.toggle("nogrime",v==="off")},
   {g:"flicker",opts:[["on","ON"],["off","OFF"]],get:()=>document.body.classList.contains("noflicker")?"off":"on",set:v=>document.body.classList.toggle("noflicker",v==="off")},
-  {g:"ghost",opts:[["on","ON"],["off","OFF"]],get:()=>W.ghost?"on":"off",set:v=>{if((v==="on")!==W.ghost)toggleGhost();}}
+  {g:"ghost",opts:[["on","ON"],["off","OFF"]],get:()=>W.ghost?"on":"off",set:v=>{if((v==="on")!==W.ghost)toggleGhost();}},
+  {g:"ai",opts:[["on","ON"],["off","OFF"]],get:()=>W.ai.enabled?"on":"off",set:v=>{W.ai.enabled=(v==="on");const row=document.getElementById("airow");if(row)row.style.display=W.ai.enabled?"block":"none";aiSave();}}
 ];
 function buildCfg(){
   CFG.forEach(row=>{
@@ -419,11 +591,16 @@ function buildCfg(){
     host.innerHTML=row.opts.map(o=>`<span class="opt" data-v="${o[0]}">${o[1]}</span>`).join("");
     host.querySelectorAll(".opt").forEach(o=>o.onclick=()=>{row.set(o.dataset.v);syncCfg();});
   });
+  const k=document.getElementById("ai-key"),m=document.getElementById("ai-model"),row=document.getElementById("airow");
+  if(k){k.value=W.ai.key||"";k.onchange=e=>{W.ai.key=e.target.value.trim();aiSave();};}
+  if(m){m.value=W.ai.model||"";m.onchange=e=>{W.ai.model=e.target.value.trim();aiSave();};}
+  if(row)row.style.display=W.ai.enabled?"block":"none";
   syncCfg();
 }
 function syncCfg(){
   CFG.forEach(row=>{const cur=row.get();document.querySelectorAll(`.opts[data-group="${row.g}"] .opt`).forEach(o=>o.classList.toggle("sel",o.dataset.v===cur));});
-  document.getElementById("scenedesc").textContent=SCENES[W.scene].desc;
+  const s=SCENES[W.scene];if(s)document.getElementById("scenedesc").textContent=s.desc;
+  saveCfg();
 }
 function openCfg(){syncCfg();document.getElementById("cfgwrap").classList.add("show");}
 function closeCfg(){document.getElementById("cfgwrap").classList.remove("show");term.focus();}
@@ -462,11 +639,23 @@ function banner(){
   wl(dim("  [*] SIMULATION — procedural output, no real hosts are contacted"));
   wl("");
 }
+let BOOTCFG=null;
 function boot(){
   const mon=location.hash==="#monitor";
-  applyTheme("green");buildCfg();
+  BOOTCFG=loadCfg();          // capture BEFORE buildCfg()/syncCfg() can overwrite storage
+  const saved=BOOTCFG;
+  aiLoad();
+  buildCfg();
+  applyTheme(saved&&THEMES[saved.theme]?saved.theme:"green");
+  if(saved){
+    if(SPEEDS[saved.speed])W.speed=saved.speed;
+    if(DMUL[saved.density])W.density=saved.density;
+    document.body.classList.toggle("noscan",saved.scan===false);
+    document.body.classList.toggle("nogrime",saved.grime===false);
+    document.body.classList.toggle("noflicker",saved.flicker===false);
+  }
   ensureTargets(R.i(5,9));rebuildHops();renderTopo();renderThreat();renderMeters();
-  setScene("ghostnet",true); // silent on boot; banner prints next
+  setScene(saved&&SCENES[saved.scene]?saved.scene:"ghostnet",true); // plugin scenes applied after load
   banner();
   const seq=[
     ()=>wl(pri("[ok] ")+dim("loading procedural network engine…")),
@@ -477,6 +666,20 @@ function boot(){
   ];
   seq.forEach((f,i)=>setTimeout(f,350+i*340));
   startClocks();
+  applyParams();
   if(mon){document.querySelector("#controls").style.display="none";setTimeout(()=>{if(!W.ghost)toggleGhost();},2300);}
 }
 boot();
+
+/* after plugins.js has registered built-ins, restore any saved plugins + scene */
+addEventListener("load",()=>{
+  const saved=BOOTCFG;
+  if(saved&&Array.isArray(saved.plugins))saved.plugins.forEach(id=>enablePlugin(id,true));
+  if(saved&&SCENES[saved.scene]&&saved.scene!==W.scene)setScene(saved.scene,true);
+  applyParams(); // re-apply URL params now that plugin scenes are registered
+  document.getElementById("s-scene").textContent=SCENES[W.scene].name;
+  document.getElementById("mhead-scene").textContent=SCENES[W.scene].name;
+  const on=Object.keys(ENABLED);
+  if(on.length)setTimeout(()=>wl(dim("[pkg] restored plugins: ")+fg(on.join(" "))+"\n"),2000);
+  syncCfg();
+});
