@@ -1,7 +1,7 @@
 {
   "name": "netghost",
   "productName": "NetGhost",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Ambient network & security terminal engine — a procedural \"ghost console\" monitor and stream backdrop. Simulation only; no real network activity.",
   "author": {
     "name": "Apoji_Delegraphics",
