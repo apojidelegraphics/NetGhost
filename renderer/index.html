@@ -244,6 +244,30 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
 @keyframes blippulse{0%{r:1;opacity:.9}100%{r:16;opacity:0}}
 #mapticker{height:74px;overflow:hidden;margin-top:6px;font-size:11px;font-family:var(--mono)}
 #mapticker div{color:var(--dim);padding:1px 0} #mapticker .cc{color:var(--cyan)}
+/* generic pop-up overlay (cams / vault / breach) */
+#popwrap{position:fixed;inset:0;z-index:84;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center}
+#popwrap.show{display:flex}
+#popdlg{width:min(900px,95vw);max-height:90vh;overflow:auto;background:var(--panelbg);border:2px solid var(--primary);box-shadow:6px 6px 0 #000,0 0 0 2px #000}
+#popbody{padding:12px}
+.camgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.camtile{position:relative;aspect-ratio:4/3;background:#050709;border:1px solid var(--line2);overflow:hidden}
+.camtile .noise{position:absolute;inset:0;opacity:.28;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");animation:camshift .25s steps(2) infinite}
+.camtile .scan{position:absolute;left:0;right:0;height:16px;background:linear-gradient(rgba(0,255,163,.18),transparent);animation:camscan 3.2s linear infinite}
+.camtile .lbl{position:absolute;top:3px;left:4px;font-family:var(--pixel);font-size:8px;color:var(--primary);text-shadow:0 0 3px #000}
+.camtile .rec{position:absolute;top:3px;right:4px;font-family:var(--pixel);font-size:8px;color:var(--red);text-shadow:0 0 3px #000}
+.camtile .ts{position:absolute;bottom:3px;left:4px;font-family:var(--mono);font-size:10px;color:#9fe;text-shadow:0 0 3px #000}
+.camtile.lost{display:flex;align-items:center;justify-content:center;color:var(--dim);font-family:var(--pixel);font-size:9px;background:#0a0a0c}
+@keyframes camscan{0%{top:-16px}100%{top:100%}} @keyframes camshift{50%{transform:translateX(1px)}}
+.vrow{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px dotted var(--line);font-size:12px}
+.vrow .vn{flex:1;color:var(--fg)} .vrow .vs{color:var(--dim);width:72px;text-align:right}
+.vbar{width:140px;height:9px;background:#000;border:1px solid var(--line2)} .vbar i{display:block;height:100%;background:var(--primary);width:0;transition:width .3s}
+#popdlg.breach{border-color:var(--red);box-shadow:6px 6px 0 #000,0 0 0 2px #000,0 0 50px rgba(214,72,79,.45)}
+#popdlg.breach .ph{background:var(--red)}
+.breachbox{text-align:center;padding:30px 16px}
+.breachbox .bt{font-family:var(--stencil);font-size:46px;letter-spacing:5px;color:var(--red);text-shadow:2px 2px 0 #000,0 0 18px rgba(214,72,79,.7);animation:glitch .18s steps(2) infinite}
+.breachbox .bs{font-family:var(--pixel);font-size:10px;color:var(--amber);margin-top:14px;letter-spacing:1px}
+.breachbox .bn{font-size:11px;color:var(--dim);margin-top:12px}
+@keyframes glitch{50%{transform:translate(1px,-1px)}}
 
 @media(max-width:900px){
   #app{grid-template-columns:1fr;grid-template-areas:"top" "main" "right"}
@@ -369,6 +393,13 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
       </svg>
       <div id="mapticker"></div>
     </div>
+  </div>
+</div>
+
+<div id="popwrap">
+  <div id="popdlg">
+    <div class="ph"><b id="poptitle">POPUP</b><div class="btns"><i id="pop-x">X</i></div></div>
+    <div id="popbody"></div>
   </div>
 </div>
 

