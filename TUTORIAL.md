@@ -79,6 +79,11 @@ Click the console and type. Press **Enter** to run. Use **↑ / ↓** for histor
 | `help` | List all commands |
 | `ghost v_start3` | Begin the ambient stream (NetGhost boots idle) |
 | `ghost v_stop3` | Halt the stream — back to idle |
+| `agent [topic]` / `ask` / `explain <q>` | Analyst report / ask the ghost a question |
+| `map` | Open the world attack map |
+| `mission` | Objectives + score |
+| `director on` / `off` | Auto-rotate scenes |
+| `port` / `port close` | Open / close a monitor pop-out |
 | `scan [ip]` / `nmap <ip>` | Port/service sweep of a host (random if no IP) |
 | `ping [ip]` | ICMP echo |
 | `trace [ip]` | Traceroute through the proxy chain |

@@ -56,7 +56,7 @@ const ts=()=>new Date().toTimeString().slice(0,8);
 const tsU=()=>{const d=new Date();return d.toTimeString().slice(0,8)+"."+String(d.getMilliseconds()).padStart(3,"0")+R.i(100,999);};
 
 /* ---------- world state ---------- */
-const W={ghost:false,paused:false,streaming:false,scene:"ghostnet",speed:"normal",density:"normal",
+const W={ghost:false,paused:false,streaming:false,director:false,mission:null,score:0,scene:"ghostnet",speed:"normal",density:"normal",
   targets:[],hops:[],threats:[],threatScore:0,queue:[],ppsAcc:0,pps:0,start:Date.now(),agents:[],
   res:{cpu:6,mem:22,net:4,disk:11,temp:41,fd:800,sock:120,hist:[]}};
 const SESS=(R.hex(4)+"-"+R.hex(4)).toUpperCase();
@@ -81,6 +81,7 @@ function onSync(m){ if(!m)return;
   if(m.t==="res"){ W.res=m.res; renderMeters(); }
   else if(m.t==="pps"){ const e=document.getElementById("s-pps"); if(e)e.textContent=Number(m.v).toLocaleString(); }
   else if(m.t==="agent"&&m.entry){ W.agents.unshift(m.entry); W.agents=W.agents.slice(0,30); renderAgents(); }
+  else if(m.t==="closewin"){ if(m.id===WIN_ID){ try{window.close();}catch(e){} } }
 }
 if(BC)BC.onmessage=e=>onSync(e.data||{});
 if(window.netghost&&window.netghost.onSync)window.netghost.onSync(onSync);
@@ -134,7 +135,8 @@ term.attachCustomKeyEventHandler(e=>{
   if(e.ctrlKey&&e.shiftKey&&(e.key==="G"||e.key==="g")){toggleGhost();return false;}
   if(e.ctrlKey&&e.shiftKey&&(e.key==="F"||e.key==="f")){goFull();return false;}
   if(e.key==="Escape"){
-    if(document.getElementById("pkgwrap").classList.contains("show"))closePkg();
+    if(document.getElementById("mapwrap").classList.contains("show"))closeMap();
+    else if(document.getElementById("pkgwrap").classList.contains("show"))closePkg();
     else if(document.getElementById("cfgwrap").classList.contains("show"))closeCfg();
     else openCfg();
     return false;
@@ -175,8 +177,13 @@ function renderHops(active){
 }
 function pushThreat(sev,txt){
   W.threats.unshift({sev,txt,t:new Date()});W.threats=W.threats.slice(0,40);
-  W.threatScore=Math.min(100,W.threatScore+(sev==="crit"?18:sev==="high"?10:sev==="med"?5:2));
+  const prev=W.threatScore;
+  W.threatScore=Math.min(100,prev+(sev==="crit"?18:sev==="high"?10:sev==="med"?5:2));
   renderThreat();
+  if(typeof agentEvent==="function"){
+    if(sev==="crit") agentEvent("breach — "+txt);
+    else if(W.threatScore>70 && prev<=70) agentEvent("threat level now CRITICAL");
+  }
 }
 function renderThreat(){
   document.getElementById("threat").innerHTML=W.threats.slice(0,20).map(t=>
@@ -329,7 +336,7 @@ function setScene(id,silent){
 /* ============================================================================
    CLOCKS
    ========================================================================== */
-let cU,cR,cP,cA,cG,cPlug,cAgent,cHB;
+let cU,cR,cP,cA,cG,cPlug,cAgent,cHB,cDir,cMission;
 function startClocks(){
   stopClocks();const sp=SPEEDS[W.speed];
   cU=setInterval(()=>{const s=Math.floor((Date.now()-W.start)/1000);document.getElementById("s-up").textContent=[s/3600,s/60%60,s%60].map(x=>String(Math.floor(x)).padStart(2,"0")).join(":");},1000);
@@ -346,8 +353,10 @@ function startClocks(){
     const now=Date.now(); for(const k in WINS) if(now-WINS[k]>6000) delete WINS[k];
     const e=document.getElementById("s-ports"); if(e)e.textContent=Object.keys(WINS).length;
   },2000);
+  cDir=setInterval(directorTick,90000);    // scene director rotates scenes every 90s when on
+  cMission=setInterval(missionTick,4000);  // mission progress checker
 }
-function stopClocks(){[cU,cR,cP,cA,cG,cPlug,cAgent,cHB].forEach(clearInterval);}
+function stopClocks(){[cU,cR,cP,cA,cG,cPlug,cAgent,cHB,cDir,cMission].forEach(clearInterval);}
 function active(){ return W.ghost||W.streaming; }   // is the stream running?
 function ambient(){ if(W.paused||!active())return;
   if(W.queue.length){ try{W.queue.shift()();}catch(e){} if(W.queue.length&&R.chance(.6)){try{W.queue.shift()();}catch(e){}} return; }
@@ -357,7 +366,7 @@ function ambient(){ if(W.paused||!active())return;
 /* every minute, visibly run a couple of installed plugins (scene-bearing ones) */
 function pluginBurst(){
   if(W.paused||IS_MON||!active())return;
-  const ids=Object.keys(ENABLED).filter(id=>ENABLED[id].scenes&&Object.keys(ENABLED[id].scenes).length);
+  const ids=Object.keys(ENABLED).filter(id=>ENABLED[id].scenes&&Object.keys(ENABLED[id].scenes).length&&!W.sweepExclude.includes(id));
   if(!ids.length)return;
   const pick=R.shuffle(ids).slice(0,R.i(2,3));
   wl("");wl(mag("◆ PLUGIN SWEEP ")+dim("— running "+pick.join(", ")));
@@ -380,6 +389,54 @@ function ghostTick(){ if(!W.ghost||W.paused)return;
   else{try{W.queue.shift()();}catch(e){}}
 }
 
+/* ----- scene director: auto-rotate scenes/themes on a timer ----- */
+function directorTick(){
+  if(IS_MON||W.paused||!W.director||!active())return;
+  const list=Object.keys(SCENES); let next=W.scene;
+  for(let i=0;i<8&&next===W.scene;i++) next=R.pick(list);
+  setScene(next,true);
+  document.getElementById("s-scene").textContent=SCENES[W.scene].name;
+  document.getElementById("mhead-scene").textContent=SCENES[W.scene].name;
+  if(R.chance(.4)) applyTheme(R.pick(Object.keys(THEMES)));
+  wl("");wl(cyan("▷ DIRECTOR ")+dim("→ scene ")+wht(SCENES[W.scene].name));wl("");
+}
+/* ----- missions: optional objectives + score ----- */
+const MISSIONS=[
+  {name:"RECON",   goal:"discover 12 hosts",         target:12, pts:100, metric:()=>W.targets.length},
+  {name:"SURFACE", goal:"map 40 open services",       target:40, pts:150, metric:()=>openPortCount()},
+  {name:"BREACH",  goal:"breach 3 hosts",             target:3,  pts:250, metric:()=>W.targets.filter(t=>t.breached).length},
+  {name:"HEAT",    goal:"drive threat index to 80",   target:80, pts:200, metric:()=>W.threatScore},
+  {name:"SWARM",   goal:"open 3 ports (windows)",     target:3,  pts:120, metric:()=>Object.keys(WINS).length}
+];
+function startMission(i){
+  W.mission=Object.assign({},MISSIONS[i%MISSIONS.length],{idx:i%MISSIONS.length,half:false});
+  wl("");wl(amber("▣ MISSION ")+wht(W.mission.name)+dim(" — "+W.mission.goal)+dim("  ·  +"+W.mission.pts+" pts"));wl("");
+}
+function missionBar(p){const n=16,on=Math.round(Math.max(0,Math.min(1,p))*n);return "["+"█".repeat(on)+"·".repeat(n-on)+"]";}
+function missionStatus(){
+  if(!W.mission){ wl(dim("no active mission — ")+wht("mission start")+dim(" to begin")+"\n"); return; }
+  const m=W.mission, v=Math.min(m.target,m.metric()), p=v/m.target;
+  wl(amber("▣ "+m.name)+dim(" · "+m.goal)); wl(fg("  "+missionBar(p))+dim(`  ${v}/${m.target}  ·  score ${W.score}`)); wl("");
+}
+function missionTick(){
+  if(IS_MON||W.paused||!active()||!W.mission)return;
+  const m=W.mission, v=m.metric(), p=v/m.target;
+  if(!m.half&&p>=0.5){ m.half=true; wl(cyan("▣ "+m.name)+dim(" — halfway ")+fg(missionBar(p))); }
+  if(v>=m.target){
+    W.score+=m.pts;
+    wl("");wl(pri("✔ MISSION COMPLETE ")+wht(m.name)+dim("  +"+m.pts+" pts  ·  total ")+pri(W.score));wl("");
+    startMission(m.idx+1);
+  }
+}
+function missionCmd(a){
+  const sub=(a[0]||"").toLowerCase();
+  if(sub==="skip"){ startMission(W.mission?W.mission.idx+1:0); return; }
+  if(sub==="start"){ startMission(0); return; }
+  if(sub==="list"){ MISSIONS.forEach(m=>wl("  "+pri(pad(m.name,9))+dim(m.goal+"  +"+m.pts))); wl(""); return; }
+  if(!W.mission){ startMission(0); return; }
+  missionStatus();
+}
+
 /* ============================================================================
    COMMANDS
    ========================================================================== */
@@ -389,7 +446,9 @@ const HELP=[["help","this list"],["ghost v_start3","begin the ambient stream"],[
   ["scene <id>","switch scene (recon/redteam/ddos/soc/ghostnet)"],["ghost","toggle auto-ghost"],["targets","list hosts"],
   ["hops","rebuild proxy chain"],["setup","open config"],["reseed [n]","regen world"],["pause","freeze streams"],
   ["theme <id>","phosphor colour"],["speed <id>","stream rate"],["pkg <cmd>","plugins: list/install/remove"],
-  ["agent [topic]","AI/sim analyst report"],["port","open a monitor pop-out"],["kiosk","toggle stream chrome"],["obs","stream/OBS params"],
+  ["agent [topic]","AI/sim analyst report"],["ask / explain <q>","ask the ghost a question"],
+  ["port","open a monitor pop-out"],["port close","close a pop-out"],["kiosk","toggle stream chrome"],["obs","stream/OBS params"],
+  ["map","open the world attack map"],["mission","objectives + score"],["director <on/off>","auto-rotate scenes"],
   ["reset","restore default settings"],["full","fullscreen"],["clear","wipe screen"],["about","what this is"]];
 function isIp(s){return /^\d{1,3}(\.\d{1,3}){3}$/.test(s||"");}
 function findMake(ip){let t=W.targets.find(x=>x.ip===ip);if(!t){t=makeTarget();if(isIp(ip))t.ip=ip;W.targets.push(t);renderTopo();}return t;}
@@ -434,9 +493,20 @@ function runCmd(raw){
     case"pkg":case"brew":case"plugin":case"plugins":pkg(p.slice(1));break;
     case"reset":case"defaults":resetCfg();wl(pri("settings reset")+dim(" — defaults restore on next launch")+"\n");break;
     case"agent":case"ask":case"report":aiAgent(p.slice(1).join(" "),false);break;
+    case"explain":case"why":aiAgent((c==="why"?"why ":"explain ")+p.slice(1).join(" "),false);break;
     case"kiosk":toggleKiosk();wl(dim("kiosk "+(document.body.classList.contains("kiosk")?"on — press Esc for setup":"off"))+"\n");break;
     case"obs":case"stream":obsHelp();break;
-    case"port":case"pop":case"popout":popOut();wl(dim("opening a port — new monitor window")+"\n");break;
+    case"map":case"worldmap":openMap();break;
+    case"port":case"pop":case"popout":
+      if((a||"").toLowerCase()==="close")portClose();
+      else{popOut();wl(dim("opening a port — new monitor window")+"\n");}
+      break;
+    case"close":portClose();break;
+    case"mission":case"missions":missionCmd(p.slice(1));break;
+    case"director":
+      W.director=((a||"").toLowerCase()!=="off");
+      wl(W.director?cyan("▷ director on")+dim(" — scenes rotate every 90s"):dim("director off"));wl("");
+      syncCfg();break;
     default:
       if(PCMDS[c]){try{PCMDS[c].fn(p.slice(1),window.NetGhost.api);}catch(e){wl(red("plugin error: ")+dim(e.message)+"\n");}break;}
       wl(red("ghost: ")+dim(`command not found: ${c}  (try 'help' or 'pkg list')`)+"\n");
@@ -454,6 +524,7 @@ function toggleGhost(){
   document.getElementById("s-link").textContent=W.ghost?"ENGAGED":"GHOST";
   W.queue=[];
   wl("");wl(W.ghost?amber("╔══ AUTO-GHOST ENGAGED ")+dim("— autonomous sequences queued ══╗"):dim("── auto-ghost disengaged — manual control ──"));wl("");
+  if(W.ghost&&!W.mission)startMission(0);
   syncCfg();
 }
 function togglePause(){
@@ -462,7 +533,8 @@ function togglePause(){
 }
 function startStream(){ if(W.streaming){wl(dim("stream already running")+"\n");return;} W.streaming=true;
   document.getElementById("s-link").textContent=W.ghost?"ENGAGED":"LIVE";
-  wl("");wl(pri("▶ STREAM STARTED ")+dim("— ambient feed is live.  'ghost v_stop3' to halt · 'ghost' for Auto-Ghost"));wl(""); }
+  wl("");wl(pri("▶ STREAM STARTED ")+dim("— ambient feed is live.  'ghost v_stop3' to halt · 'ghost' for Auto-Ghost"));wl("");
+  if(!W.mission)startMission(0); }
 function stopStream(){ W.streaming=false; W.queue=[];
   if(!W.ghost)document.getElementById("s-link").textContent="GHOST";
   wl("");wl(dim("■ stream stopped — idle.  type ")+wht("ghost v_start3")+dim(" to resume"));wl(""); }
@@ -492,6 +564,13 @@ function popOut(){
   const w=window.open(base+"#monitor","netghost_mon_"+R.i(1,9999),"width=1280,height=720");
   if(!w)wl(amber("[!] ")+dim("pop-out blocked — allow popups for a second-monitor view")+"\n");
 }
+function portClose(){
+  if(IS_MON){ try{window.close();}catch(e){} return; }
+  const victims=Object.keys(WINS).filter(id=>id!==WIN_ID);
+  if(!victims.length){ wl(dim("no pop-out ports open to close")+"\n"); return; }
+  sendSync({t:"closewin",id:victims[victims.length-1]});
+  wl(dim("closing a pop-out port…")+"\n");
+}
 
 /* ============================================================================
    CONFIG PERSISTENCE  (localStorage — works in Electron renderer & browser)
@@ -505,6 +584,8 @@ function saveCfg(){
       grime:!document.body.classList.contains("nogrime"),
       flicker:!document.body.classList.contains("noflicker"),
       pluginsAuto:W.pluginsAuto,
+      director:W.director,
+      sweepExclude:W.sweepExclude,
       plugins:Object.keys(ENABLED)
     }));
   }catch(e){}
@@ -590,6 +671,7 @@ const AI_LS="netghost.ai.v1";
 W.ai={enabled:false,key:"",model:"openai/gpt-4o-mini"};
 W.aiCalls=[];         // timestamps of auto AI calls (rate-limited to 2/hr)
 W.pluginsAuto=true;   // let installed plugins run inside Auto-Ghost (ghostnet)
+W.sweepExclude=[];    // plugin ids excluded from the minute plugin sweep
 function aiLoad(){ try{const s=JSON.parse(localStorage.getItem(AI_LS)||"null");if(s)W.ai={enabled:!!s.enabled,key:s.key||"",model:s.model||"openai/gpt-4o-mini"};}catch(e){} }
 function aiSave(){ try{localStorage.setItem(AI_LS,JSON.stringify(W.ai));}catch(e){} }
 async function callOpenRouter(messages){
@@ -625,6 +707,20 @@ function worldSummary(){
 const AGENTS=["GHOST-ANALYST","RECON-ORACLE","THREAT-SEER","NET-WARDEN","SIGINT-BOT"];
 const AGENT_TOPICS=["current operation","threat posture","the breached hosts","exfil risk","next move","the proxy chain","open attack surface"];
 const AGENT_ACTIONS=["pushing a fix","flagging a threat","recommending rotation","escalating watch","queuing remediation","opening a ticket","advising isolation","greenlighting the next step"];
+const AGENT_PERSONA={
+  "GHOST-ANALYST":"clinical, precise and understated",
+  "RECON-ORACLE":"curious and probing — you think out loud and ask what-ifs",
+  "THREAT-SEER":"ominous and cryptic — you speak in warnings and omens",
+  "NET-WARDEN":"a gruff, protective blue-team defender who hates sloppiness",
+  "SIGINT-BOT":"terse and robotic — clipped, numeric, no filler"
+};
+const AGENT_QUIP={
+  "GHOST-ANALYST":["Noted and filed.","Confidence: high.","I'll keep watching this one."],
+  "RECON-ORACLE":["What else is it hiding?","Curious. Very curious.","There's a door here somewhere."],
+  "THREAT-SEER":["Something stirs in the dark.","I have seen this pattern end badly.","The quiet ones worry me most."],
+  "NET-WARDEN":["Not on my watch.","Patch it before they do.","Sloppy. Lock it down."],
+  "SIGINT-BOT":["END OF LINE.","PROBABILITY NOMINAL.","LOGGING. STANDING BY."]
+};
 function simLines(topic){
   const T=W.targets, br=T.filter(t=>t.breached).length, open=openPortCount(), score=W.threatScore, hops=W.hops.length;
   const scene=SCENES[W.scene]?SCENES[W.scene].name:W.scene;
@@ -678,7 +774,7 @@ function renderAgents(){
     a.lines.map(l=>`<div class="aline">${esc(l)}</div>`).join("")+
     `<div class="asrc">${esc(a.src)}</div></div>`).join("");
 }
-async function aiAgent(query,isAuto){
+async function aiAgent(query,isAuto,isEvent){
   const who=R.pick(AGENTS), topic=query||R.pick(AGENT_TOPICS);
   let lines, src;
   const canAI = W.ai.enabled && W.ai.key && (!isAuto || aiQuotaOk());
@@ -686,7 +782,7 @@ async function aiAgent(query,isAuto){
     if(isAuto) W.aiCalls.push(Date.now());   // auto calls count against the 2/hr budget; manual don't
     try{
       const out=await callOpenRouter([
-        {role:"system",content:"You are "+who+", a cyber-ops analyst speaking inside the fictional NetGhost terminal. Everything here is a harmless SIMULATION — no real infrastructure. Output ONLY the intelligence report: 3 to 5 short lines of plain terminal text. Hard rules: no markdown, no bullet symbols, no preamble, no sign-off; do NOT restate, acknowledge, or reason about the task or these rules; begin immediately with the first line of the report. Be terse, confident and a little cinematic, and reference the actual hosts and threats in the telemetry. If the requested topic is nonsensical or unrelated, note that in one short line, then report on the current operation instead."},
+        {role:"system",content:"You are "+who+", a cyber-ops analyst speaking inside the fictional NetGhost terminal. Everything here is a harmless SIMULATION — no real infrastructure. Your voice: "+(AGENT_PERSONA[who]||"terse and confident")+" — stay in character. Output ONLY the report: 3 to 5 short lines of plain terminal text. Hard rules: no markdown, no bullet symbols, no preamble, no sign-off; do NOT restate, acknowledge, or reason about the task or these rules; begin immediately with the first line. Reference the actual hosts and threats in the telemetry. If the topic is a question, answer it directly and briefly. If it is nonsensical, note that in one short line, then report on the current operation."},
         {role:"user",content:"Topic: "+topic+"\nTelemetry:\n"+worldSummary()}
       ]);
       lines=cleanReport(out); src="OpenRouter · "+(W.ai.model||"");
@@ -698,8 +794,16 @@ async function aiAgent(query,isAuto){
     lines=simLines(topic);
     src=(W.ai.enabled&&W.ai.key&&isAuto)?"local · auto-AI budget (2/hr) spent — type 'agent' for live":"local analysis";
   }
-  wl(mag("◆ ")+wht(who)+dim(" responded → ")+fg(R.pick(AGENT_ACTIONS))+dim("  (see AGENT.FEED)"));
-  postAgent(who,topic,lines,src);
+  if(/^local/.test(src)&&AGENT_QUIP[who]&&R.chance(.6)) lines.push("— "+R.pick(AGENT_QUIP[who]));
+  if(isEvent) wl(red("⚠ ")+wht(who)+dim(" reacting → ")+amber(topic.replace(/^⚠ /,""))+dim("  (see AGENT.FEED)"));
+  else wl(mag("◆ ")+wht(who)+dim(" responded → ")+fg(R.pick(AGENT_ACTIONS))+dim("  (see AGENT.FEED)"));
+  postAgent(who,topic.replace(/^⚠ /,""),lines,src);
+}
+/* event-reactive agents: fire on breaches / threat going critical (debounced) */
+function agentEvent(reason){
+  if(IS_MON||!active())return;
+  const now=Date.now(); if(now-(W.lastEvent||0)<20000)return; W.lastEvent=now;
+  aiAgent("⚠ "+reason, true, true);
 }
 /* ----- stream / OBS ----- */
 function setKiosk(on){ document.body.classList.toggle("kiosk",on); try{fit.fit();}catch(e){} }
@@ -737,11 +841,13 @@ const CFG=[
   {g:"flicker",opts:[["on","ON"],["off","OFF"]],get:()=>document.body.classList.contains("noflicker")?"off":"on",set:v=>document.body.classList.toggle("noflicker",v==="off")},
   {g:"ghost",opts:[["on","ON"],["off","OFF"]],get:()=>W.ghost?"on":"off",set:v=>{if((v==="on")!==W.ghost)toggleGhost();}},
   {g:"autoplug",opts:[["on","ON"],["off","OFF"]],get:()=>W.pluginsAuto?"on":"off",set:v=>{W.pluginsAuto=(v==="on");}},
+  {g:"director",opts:[["on","ON"],["off","OFF"]],get:()=>W.director?"on":"off",set:v=>{W.director=(v==="on");}},
   {g:"ai",opts:[["on","ON"],["off","OFF"]],get:()=>W.ai.enabled?"on":"off",set:v=>{W.ai.enabled=(v==="on");const row=document.getElementById("airow");if(row)row.style.display=W.ai.enabled?"block":"none";aiSave();}}
 ];
 function buildCfg(){
   CFG.forEach(row=>{
     const host=document.querySelector(`.opts[data-group="${row.g}"]`);
+    if(!host)return;
     host.innerHTML=row.opts.map(o=>`<span class="opt" data-v="${o[0]}">${o[1]}</span>`).join("");
     host.querySelectorAll(".opt").forEach(o=>o.onclick=()=>{row.set(o.dataset.v);syncCfg();});
   });
@@ -770,12 +876,21 @@ function renderPkgOverlay(){
     if(p.commands)bits.push("cmd: "+Object.keys(p.commands).join(" "));
     if(p.scenes)bits.push("scene: "+Object.keys(p.scenes).join(" "));
     if(p.themes)bits.push("theme: "+Object.keys(p.themes).join(" "));
+    const sweepable = on && p.scenes && Object.keys(p.scenes).length;
+    const inSweep = !W.sweepExclude.includes(id);
+    const chk = sweepable?`<span class="pkgcheck ${inSweep?'on':''}" data-sweep="${esc(id)}" title="include in the minute sweep"><span class="box">${inSweep?'✓':''}</span>sweep</span>`:'';
     return `<div class="pkgrow"><div class="pkgmeta">
       <div class="pkgname">${on?'<span class="pkgon">● </span>':''}${esc(p.name)}<span class="pkgid">${esc(id)}</span></div>
       <div class="pkgdesc">${esc(p.desc||"")}</div>
       <div class="pkgbits">${esc(bits.join("   ·   "))}</div></div>
+      ${chk}
       <button class="b ${on?'':'on'}" data-pkg="${esc(id)}">${on?'REMOVE':'INSTALL'}</button></div>`;
   }).join("");
+  body.querySelectorAll(".pkgcheck[data-sweep]").forEach(c=>c.onclick=()=>{
+    const id=c.dataset.sweep, i=W.sweepExclude.indexOf(id);
+    if(i>=0)W.sweepExclude.splice(i,1); else W.sweepExclude.push(id);
+    saveCfg(); renderPkgOverlay();
+  });
   body.querySelectorAll("button[data-pkg]").forEach(b=>b.onclick=()=>{
     const id=b.dataset.pkg;
     if(ENABLED[id]){disablePlugin(id);wl(dim("[pkg] removed ")+fg(id));}
@@ -786,6 +901,41 @@ function renderPkgOverlay(){
 function openPkg(){renderPkgOverlay();document.getElementById("pkgwrap").classList.add("show");}
 function closePkg(){document.getElementById("pkgwrap").classList.remove("show");term.focus();}
 
+/* ---- world attack map overlay ---- */
+const CC_XY={US:[-100,40],CA:[-106,56],BR:[-51,-10],NL:[5,52],DE:[10,51],SE:[18,62],CH:[8,47],RO:[25,46],IS:[-19,65],ZA:[25,-29],RU:[90,60],CN:[105,35],IN:[78,22],IR:[53,32],SG:[103,1],JP:[138,36],VN:[106,16]};
+function lonlat(a){return [ (a[0]+180)/360*1000, (90-a[1])/180*500 ];}
+const SVGNS="http://www.w3.org/2000/svg";
+function svgEl(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+let mapTimer=null, mapBuilt=false;
+function buildMap(){
+  if(mapBuilt)return; mapBuilt=true;
+  const grid=document.getElementById("map-grid"), dots=document.getElementById("map-dots");
+  let g=""; for(let x=0;x<=1000;x+=1000/12)g+=`<line x1="${x}" y1="0" x2="${x}" y2="500"/>`;
+  for(let y=0;y<=500;y+=500/6)g+=`<line x1="0" y1="${y}" x2="1000" y2="${y}"/>`;
+  grid.innerHTML=g;
+  let d=""; for(const cc in CC_XY){const p=lonlat(CC_XY[cc]);d+=`<circle class="cc" cx="${p[0].toFixed(0)}" cy="${p[1].toFixed(0)}" r="2.4"/>`;}
+  for(let i=0;i<190;i++)d+=`<circle cx="${R.i(15,985)}" cy="${R.i(15,485)}" r="${R.chance(.2)?1.4:0.8}"/>`;
+  dots.innerHTML=d;
+}
+function spawnArc(){
+  const arcs=document.getElementById("map-arcs"), blips=document.getElementById("map-blips"); if(!arcs)return;
+  const ccs=Object.keys(CC_XY);
+  const o=lonlat(CC_XY[R.pick(ccs)]);
+  const t=R.chance(.5)?lonlat(CC_XY[R.pick(ccs)]):[R.i(60,940),R.i(40,460)];
+  const mx=(o[0]+t[0])/2, my=Math.min(o[1],t[1])-R.i(40,150);
+  const sev=R.chance(.18)?"crit":R.chance(.4)?"high":"low";
+  const col=sev==="crit"?"var(--red)":sev==="high"?"var(--amber)":"var(--primary)";
+  const p=svgEl("path",{d:`M${o[0].toFixed(0)},${o[1].toFixed(0)} Q${mx.toFixed(0)},${my.toFixed(0)} ${t[0].toFixed(0)},${t[1].toFixed(0)}`,stroke:col}); p.setAttribute("pathLength","1");
+  arcs.appendChild(p); setTimeout(()=>p.remove(),2900);
+  [o,t].forEach(pt=>{const b=svgEl("circle",{cx:pt[0].toFixed(0),cy:pt[1].toFixed(0),r:1,fill:col});blips.appendChild(b);setTimeout(()=>b.remove(),1400);});
+  const tick=document.getElementById("mapticker");
+  const line=document.createElement("div");
+  line.innerHTML=`<span class="cc">${R.pick(ccs)}</span> ${randIP()} → ${privIP()}  [${R.pick(["port scan","exploit attempt","brute force","exfil","C2 beacon","DDoS"])}]`;
+  tick.prepend(line); while(tick.childElementCount>6)tick.removeChild(tick.lastChild);
+}
+function openMap(){ buildMap(); document.getElementById("mapwrap").classList.add("show"); if(!mapTimer)mapTimer=setInterval(spawnArc,600); for(let i=0;i<4;i++)spawnArc(); }
+function closeMap(){ document.getElementById("mapwrap").classList.remove("show"); clearInterval(mapTimer); mapTimer=null; term.focus(); }
+
 /* ---------- wire controls ---------- */
 document.getElementById("b-ghost").onclick=toggleGhost;
 document.getElementById("b-pause").onclick=togglePause;
@@ -793,6 +943,9 @@ document.getElementById("b-pop").onclick=popOut;
 document.getElementById("b-full").onclick=goFull;
 document.getElementById("b-cfg").onclick=openCfg;
 document.getElementById("b-pkg").onclick=openPkg;
+document.getElementById("b-map").onclick=openMap;
+document.getElementById("map-x").onclick=closeMap;
+document.getElementById("mapwrap").addEventListener("mousedown",e=>{if(e.target.id==="mapwrap")closeMap();});
 document.getElementById("cfg-x").onclick=closeCfg;
 document.getElementById("cfg-ok").onclick=closeCfg;
 document.getElementById("cfg-reseed").onclick=()=>{reseed();};
@@ -802,6 +955,7 @@ document.getElementById("cfgwrap").addEventListener("mousedown",e=>{if(e.target.
 document.getElementById("pkgwrap").addEventListener("mousedown",e=>{if(e.target.id==="pkgwrap")closePkg();});
 /* bare-letter shortcuts only when focus is OUTSIDE the terminal (e.g. a panel) */
 addEventListener("keydown",e=>{
+  if(document.getElementById("mapwrap").classList.contains("show")){if(e.key==="Escape")closeMap();return;}
   if(document.getElementById("pkgwrap").classList.contains("show")){if(e.key==="Escape")closePkg();return;}
   if(document.getElementById("cfgwrap").classList.contains("show")){if(e.key==="Escape")closeCfg();return;}
   if(inTerm())return; // terminal focused → let xterm's custom handler deal with it
@@ -825,6 +979,21 @@ function banner(){
   wl(dim("  [*] SIMULATION — procedural output, no real hosts are contacted"));
   wl("");
 }
+/* retro BIOS / POST screen, then clear and run the banner */
+function bios(cb){
+  const L=[
+    ()=>wl(pri("GHOST BIOS v96.4")+dim("   Apoji Microsystems, Inc.")),
+    ()=>wl(dim("CPU  : Ghost-Core x8 @ 4.20GHz ............. ")+pri("OK")),
+    ()=>wl(dim("RAM  : 65536K .............................. ")+pri("OK")),
+    ()=>wl(dim("STOR : ghost0  vault1  cache2 .............. ")+pri("OK")),
+    ()=>wl(dim("NET  : eth0 UP · exit node negotiated ...... ")+pri("OK")),
+    ()=>wl(dim("SEC  : phantom MAC · proxy chain armed ..... ")+pri("OK")),
+    ()=>wl(dim("Loading GHOSTNET kernel ....................")),
+    ()=>wl(dim("Press ")+wht("DEL")+dim(" to enter SETUP     boot device: GHOST0"))
+  ];
+  L.forEach((f,i)=>setTimeout(f,i*150));
+  setTimeout(()=>{ try{term.clear();}catch(e){} cb&&cb(); }, L.length*150+400);
+}
 let BOOTCFG=null;
 function boot(){
   const mon=location.hash==="#monitor";
@@ -840,21 +1009,26 @@ function boot(){
     document.body.classList.toggle("nogrime",saved.grime===false);
     document.body.classList.toggle("noflicker",saved.flicker===false);
     if(typeof saved.pluginsAuto==="boolean")W.pluginsAuto=saved.pluginsAuto;
+    if(typeof saved.director==="boolean")W.director=saved.director;
+    if(Array.isArray(saved.sweepExclude))W.sweepExclude=saved.sweepExclude;
   }
   ensureTargets(R.i(5,9));rebuildHops();renderTopo();renderThreat();renderMeters();
   setScene(saved&&SCENES[saved.scene]?saved.scene:"ghostnet",true); // plugin scenes applied after load
-  banner();
-  const seq=[
-    ()=>wl(pri("[ok] ")+dim("loading procedural network engine…")),
-    ()=>wl(pri("[ok] ")+dim(`discovered ${W.targets.length} candidate hosts on bridged segment`)),
-    ()=>wl(pri("[ok] ")+dim(`anonymizing route · ${W.hops.length} hops · exit ${R.pick(COUNTRIES)[0]}`)),
-    ()=>wl(pri("[ok] ")+dim("stream generators armed: nmap · hydra · tcpdump · syslog")),
-    ()=>{wl("");wl(pri("ready — type ")+wht("ghost v_start3")+pri(" to begin the stream")+dim("   ·  'ghost' = Auto-Ghost  ·  Esc = setup  ·  'help'"));wl("");startPrompt();term.focus();}
-  ];
-  seq.forEach((f,i)=>setTimeout(f,350+i*340));
   startClocks();
   applyParams();
-  if(mon){W.streaming=true;document.querySelector("#controls").style.display="none";setTimeout(()=>{if(!W.ghost)toggleGhost();},2300);}
+  const runIntro=()=>{
+    banner();
+    const seq=[
+      ()=>wl(pri("[ok] ")+dim("loading procedural network engine…")),
+      ()=>wl(pri("[ok] ")+dim(`discovered ${W.targets.length} candidate hosts on bridged segment`)),
+      ()=>wl(pri("[ok] ")+dim(`anonymizing route · ${W.hops.length} hops · exit ${R.pick(COUNTRIES)[0]}`)),
+      ()=>wl(pri("[ok] ")+dim("stream generators armed: nmap · hydra · tcpdump · syslog")),
+      ()=>{wl("");wl(pri("ready — type ")+wht("ghost v_start3")+pri(" to begin the stream")+dim("   ·  'ghost' = Auto-Ghost  ·  Esc = setup  ·  'help'"));wl("");startPrompt();term.focus();}
+    ];
+    seq.forEach((f,i)=>setTimeout(f,350+i*340));
+  };
+  if(mon){W.streaming=true;document.querySelector("#controls").style.display="none";setTimeout(()=>{if(!W.ghost)toggleGhost();},2300);runIntro();}
+  else bios(runIntro);
 }
 boot();
 

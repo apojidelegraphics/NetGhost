@@ -2,6 +2,21 @@
 
 All notable changes to NetGhost. Dates are approximate; versions follow the GitHub releases.
 
+## v1.1.2
+- **Event-reactive agents** — agents auto-post the moment a host is breached or the
+  threat level hits CRITICAL.
+- **Agent personalities** — each analyst (GHOST-ANALYST, THREAT-SEER, NET-WARDEN…) has
+  a distinct voice; **ask-the-ghost** with `ask` / `explain <question>`.
+- **BIOS/POST boot screen** on launch.
+- **World attack map** (`map` or the ⊕ Map button) — animated attack arcs across a world grid.
+- **Missions** — optional objectives with a score (`mission`), auto-started with the stream.
+- **Scene director** — auto-rotate scenes/themes on a timer (`director on`, or Setup).
+- **Per-plugin sweep checkboxes** in the package store — choose exactly which plugins the minute sweep runs.
+- **Close a pop-out** with `port close` / `close`.
+- **Six new plugins**: Mempool (blockchain), Trainer (AI model training), Kali Toolkit
+  (msf/sqlmap/john), Honeypot (watch the world attack you), DNS Tunnel, and more.
+- **Hosted web version** via GitHub Pages.
+
 ## v1.1.1
 - Agent reports: fixed empty responses, added a 2/hour budget for **auto**-generated AI
   reports during streams (typing `agent` yourself is never limited), and a much more

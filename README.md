@@ -40,6 +40,11 @@ backdrop.
 - 🖥️🖥️ **Multi-monitor** — pop out extra "Port" windows and spread them across screens; system load stays in sync across all of them.
 - 💾 **Remembers your setup** — scene, theme, speed and plugins persist between launches.
 
+## 🌐 Try it in your browser
+
+Once GitHub Pages is enabled (Settings → Pages → Source: **GitHub Actions**), the web
+version runs live at **https://apojidelegraphics.github.io/NetGhost/** — no install needed.
+
 ## 📥 Download
 
 Grab the latest installer for your OS from the **[Releases page](https://github.com/apojidelegraphics/NetGhost/releases)**:

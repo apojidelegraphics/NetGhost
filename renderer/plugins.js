@@ -198,4 +198,82 @@ NG.registerPlugin({
     A.wl(""); } }
 });
 
+/* ---------- 11. MEMPOOL (blockchain) --------------------------------------- */
+const COINS=["BTC","ETH","SOL","GHOST","XMR"];
+function memFeed(n){ const {wl,dim,fg,pri,amber,R}=A;
+  for(let i=0;i<n;i++){
+    if(R.chance(.18)) wl(pri("[BLOCK] ")+fg("#"+R.i(800000,900000))+dim(`  ${R.i(1200,4000)} txs · ${(R.i(1,12)+R.i(0,99)/100)} ${R.pick(COINS)} fees · ${R.i(8,14)}s`));
+    else wl(dim("0x"+R.hex(8)+"… ")+fg(A.pad((R.i(1,999)+R.i(0,99)/100)+" "+R.pick(COINS),14))+dim(`gas ${R.i(8,220)} gwei  ${R.pick(["pending","confirmed","dropped","replaced"])}  nonce ${R.i(1,9000)}`)); } }
+NG.registerPlugin({ id:"mempool", name:"Mempool", desc:"blockchain mempool — pending txs, blocks, gas, confirmations",
+  commands:{ mempool:()=>{A.wl(A.dim("$ ")+A.wht("mempool --watch"));memFeed(A.R.i(5,8));A.wl("");}, chain:()=>memFeed(A.R.i(3,5)) },
+  scenes:{ mempool:{name:"MEMPOOL", desc:"The chain breathing — transactions flooding the pool, blocks sealing, gas spiking.",
+    ops:[{fn:()=>{for(let i=0;i<A.R.i(4,7);i++)A.q(()=>memFeed(1));},w:5}]} }
+});
+
+/* ---------- 12. TRAINER (AI model training) -------------------------------- */
+let epoch=0;
+function trainFeed(n){ const {wl,dim,fg,pri,amber,R}=A;
+  for(let i=0;i<n;i++){ epoch++;
+    const loss=(3/(epoch*0.3+1)+R.i(0,30)/100).toFixed(4), acc=(Math.min(99,40+epoch*1.5)+R.i(0,99)/100).toFixed(2);
+    if(R.chance(.1)) wl(amber("[WARN] ")+dim(`grad norm ${R.i(10,999)}.0 — clipping`));
+    else wl(dim(`epoch ${A.pad(epoch,4)} `)+dim(`[${"=".repeat(R.i(1,20)).padEnd(20,".")}]`)+pri(` loss ${loss}`)+dim(`  acc ${acc}%  lr ${R.i(1,9)}e-${R.i(3,5)}  ${R.i(1,40)}k tok/s`)); }
+}
+NG.registerPlugin({ id:"trainer", name:"Trainer", desc:"AI model-training logs — epochs, loss curve, grad clipping, throughput",
+  commands:{ train:()=>{A.wl(A.dim("$ ")+A.wht("python train.py --model ghost-7b"));trainFeed(A.R.i(5,8));A.wl("");} },
+  scenes:{ training:{name:"MODEL TRAIN", desc:"A training run grinding — epochs ticking, loss falling, the odd gradient explosion.",
+    ops:[{fn:()=>{for(let i=0;i<A.R.i(4,7);i++)A.q(()=>trainFeed(1));},w:5}]} }
+});
+
+/* ---------- 13. KALI (toolkit) --------------------------------------------- */
+function msf(){ const {wl,dim,fg,pri,red,amber,R}=A; const t=A.privIP();
+  wl(dim("msf6 > ")+A.wht(`use exploit/ghost/${R.pick(["remote_svc","web_app","smb_relay","auth_bypass","file_upload"])}`));
+  wl(dim("msf6 exploit > ")+A.wht("set RHOSTS "+t)+dim("  ; run"));
+  wl(dim(`[*] Started reverse handler on ${A.privIP()}:4444`));
+  for(let i=0;i<A.R.i(1,3);i++)wl(dim(`[*] ${t} - `)+dim(R.pick(["Sending stage","Negotiating","Checking target","Staging payload"])));
+  if(R.chance(.5)){wl(pri("[+] ")+fg(`session ${R.i(1,9)} opened (${A.privIP()} -> ${t})`));A.pushThreat("crit","session on "+t);}
+  else wl(amber("[-] ")+dim("Exploit completed, but no session was created."));
+}
+function sqlmap(){ const {wl,dim,fg,pri,amber,R}=A;
+  wl(dim("$ ")+A.wht(`sqlmap -u "https://${A.privIP()}/item?id=1" --batch --dbs`));
+  wl(dim("[INFO] testing connection to the target URL"));
+  wl(amber("[INFO] ")+dim("parameter 'id' appears to be ")+fg("injectable")+dim(` (${R.pick(["boolean-based blind","time-based blind","UNION query"])})`));
+  wl(dim("available databases ["+R.i(2,9)+"]:"));
+  for(let i=0;i<A.R.i(2,4);i++)wl(dim("[*] ")+fg(R.pick(["information_schema","prod_users","billing","ghost_vault","sessions","wp_main"])));
+}
+function john(){ const {wl,dim,fg,pri,R}=A;
+  wl(dim("$ ")+A.wht("john --wordlist=rockyou.txt shadow.txt"));
+  wl(dim(`Loaded ${R.i(4,40)} password hashes (${R.pick(["sha512crypt","bcrypt","NTLM","md5crypt"])})`));
+  for(let i=0;i<A.R.i(1,4);i++)wl(fg(R.pick(["Summer2024!","hunter2","P@ssw0rd","letmein1","ghost123"]))+dim("  ("+R.pick(A.USERS)+")"));
+  wl(dim(`${R.i(100,9000)}g/s  ${R.i(1,99)}% done`));
+}
+NG.registerPlugin({ id:"kali", name:"Kali Toolkit", desc:"offensive toolkit — metasploit (msf), sqlmap, john",
+  commands:{ msf:()=>{msf();A.wl("");}, sqlmap:()=>{sqlmap();A.wl("");}, john:()=>{john();A.wl("");} },
+  scenes:{ exploit:{name:"EXPLOITATION", desc:"The toolkit swinging — Metasploit sessions, SQL injection, hashes falling to John.",
+    ops:[{fn:()=>A.q(msf),w:3},{fn:()=>A.q(sqlmap),w:2},{fn:()=>A.q(john),w:2}]} }
+});
+
+/* ---------- 14. HONEYPOT (watch others attack you) ------------------------- */
+const ATK_CC=[["CN","CN"],["RU","RU"],["BR","BR"],["IN","IN"],["US","US"],["NL","NL"],["VN","VN"],["IR","IR"]];
+function hpFeed(n){ const {wl,dim,fg,pri,amber,red,cyan,R}=A;
+  for(let i=0;i<n;i++){ const c=R.pick(ATK_CC), ip=A.randIP();
+    if(R.chance(.2)) wl(red("[CAUGHT] ")+fg(ip)+dim(` ${c[1]} tried `)+amber(R.pick(["a default login","weak credentials","a malformed request","an oversized payload","a known probe string"]))+dim(" on :"+R.pick([22,80,443,3389])));
+    else wl(dim(`${new Date().toTimeString().slice(0,8)} `)+cyan(c[1]+" ")+dim(A.pad(ip,16))+dim(`→ :${R.pick(A.PORTLIST)}  ${R.pick(["SYN scan","login attempt","banner grab","exploit probe"])} · dropped`)); }
+}
+NG.registerPlugin({ id:"honeypot", name:"Honeypot", desc:"the tables turned — watch the world attack YOUR trap and get logged",
+  commands:{ honeypot:()=>{A.wl(A.dim("$ ")+A.wht("ghostpot --listen"));hpFeed(A.R.i(5,9));A.wl("");}, trap:()=>hpFeed(A.R.i(3,5)) },
+  scenes:{ honeypot:{name:"HONEYPOT", desc:"Inbound tide — bots and scanners from around the world hammering the trap, every hit logged.",
+    ops:[{fn:()=>{for(let i=0;i<A.R.i(4,8);i++)A.q(()=>hpFeed(1));},w:5}]} }
+});
+
+/* ---------- 15. DNSTUNNEL (covert exfil) ----------------------------------- */
+function dnsFeed(n){ const {wl,dim,fg,pri,cyan,R}=A;
+  for(let i=0;i<n;i++){ const sub=A.R.hex(R.i(20,40));
+    wl(dim(`${new Date().toTimeString().slice(0,8)} `)+cyan("TXT ")+dim(sub+".")+fg(R.pick(["exfil.ghost.sh","c2.nullsec.io","dns.tunnel.cc"]))+dim(`  ${R.i(40,220)}B  seq ${R.i(1,9999)}`)); }
+  if(R.chance(.4))wl(pri("[+] ")+dim(`chunk ${R.i(1,500)}/${R.i(500,999)} exfiltrated via DNS`)); }
+NG.registerPlugin({ id:"dnstunnel", name:"DNS Tunnel", desc:"covert channel — data smuggled out one DNS query at a time",
+  commands:{ dnstunnel:()=>{A.wl(A.dim("$ ")+A.wht("iodine -f exfil.ghost.sh"));dnsFeed(A.R.i(5,8));A.wl("");}, dns:()=>dnsFeed(A.R.i(3,5)) },
+  scenes:{ exfil:{name:"DNS EXFIL", desc:"A slow bleed — bytes leaving the network disguised as DNS lookups, chunk by chunk.",
+    ops:[{fn:()=>{for(let i=0;i<A.R.i(4,7);i++)A.q(()=>dnsFeed(1));},w:5}]} }
+});
+
 })();

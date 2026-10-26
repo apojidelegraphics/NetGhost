@@ -226,6 +226,24 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
 .pkgbits{font-family:var(--pixel);font-size:8px;color:var(--cyan);margin-top:5px;letter-spacing:.3px}
 .pkgrow .b{flex:0 0 auto;align-self:center;min-width:80px;text-align:center}
 #pkg .foot{padding:10px 14px;display:flex;justify-content:flex-end;border-top:2px solid var(--line2)}
+.pkgcheck{flex:0 0 auto;align-self:center;font-family:var(--pixel);font-size:8px;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
+.pkgcheck .box{width:14px;height:14px;border:2px solid var(--line2);display:inline-block;text-align:center;line-height:11px;color:var(--primary);background:#000}
+.pkgcheck.on .box{border-color:var(--primary)}
+/* world attack map */
+#mapwrap{position:fixed;inset:0;z-index:82;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center}
+#mapwrap.show{display:flex}
+#mapdlg{width:min(1040px,96vw);background:var(--panelbg);border:2px solid var(--primary);box-shadow:6px 6px 0 #000,0 0 0 2px #000}
+#mapbody{padding:8px;position:relative}
+#worldsvg{width:100%;height:auto;display:block;background:#05080a;border:1px solid var(--line2)}
+#map-grid line{stroke:rgba(0,255,163,.08);stroke-width:1}
+#map-dots circle{fill:rgba(0,255,163,.16)}
+#map-dots circle.cc{fill:rgba(57,194,214,.65)}
+#map-arcs path{fill:none;stroke-width:1.6;stroke-dasharray:1;stroke-dashoffset:1;animation:arcdraw 1.1s ease-out forwards, arcfade 2.8s ease-in forwards}
+@keyframes arcdraw{to{stroke-dashoffset:0}} @keyframes arcfade{0%,55%{opacity:1}100%{opacity:0}}
+#map-blips circle{animation:blippulse 1.4s ease-out forwards}
+@keyframes blippulse{0%{r:1;opacity:.9}100%{r:16;opacity:0}}
+#mapticker{height:74px;overflow:hidden;margin-top:6px;font-size:11px;font-family:var(--mono)}
+#mapticker div{color:var(--dim);padding:1px 0} #mapticker .cc{color:var(--cyan)}
 
 @media(max-width:900px){
   #app{grid-template-columns:1fr;grid-template-areas:"top" "main" "right"}
@@ -261,6 +279,7 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
       <button class="b" id="b-ghost">▶Ghost</button>
       <button class="b" id="b-cfg">⚙Setup</button>
       <button class="b" id="b-pkg">⊞ Pkgs</button>
+      <button class="b" id="b-map">⊕ Map</button>
       <button class="b" id="b-pause">⏸Hold</button>
       <button class="b" id="b-pop">⧉ Port</button>
       <button class="b" id="b-full">⛶Full</button>
@@ -318,6 +337,7 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
       <div class="row"><div class="lab">FLICKER</div><div class="opts" data-group="flicker"></div></div>
       <div class="row"><div class="lab">AUTO-GHOST</div><div class="opts" data-group="ghost"></div></div>
       <div class="row"><div class="lab">PLUGINS→AUTO</div><div class="opts" data-group="autoplug"></div></div>
+      <div class="row"><div class="lab">DIRECTOR</div><div class="opts" data-group="director"></div></div>
       <div class="row"><div class="lab">AI AGENTS</div><div class="opts" data-group="ai"></div></div>
       <div id="airow" style="display:none">
         <div class="row"><div class="lab">API KEY</div><input id="ai-key" type="password" class="cfginput" placeholder="sk-or-v1-…  (OpenRouter)"></div>
@@ -337,6 +357,18 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
     <div class="ph"><b>PACKAGES — pkg store</b><div class="btns"><i id="pkg-x">X</i></div></div>
     <div id="pkgbody"></div>
     <div class="foot"><button class="b on" id="pkg-ok">CLOSE</button></div>
+  </div>
+</div>
+
+<div id="mapwrap">
+  <div id="mapdlg">
+    <div class="ph"><b>GLOBAL ATTACK MAP</b><div class="btns"><i id="map-x">X</i></div></div>
+    <div id="mapbody">
+      <svg id="worldsvg" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet">
+        <g id="map-grid"></g><g id="map-dots"></g><g id="map-arcs"></g><g id="map-blips"></g>
+      </svg>
+      <div id="mapticker"></div>
+    </div>
   </div>
 </div>
 
