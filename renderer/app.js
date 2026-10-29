@@ -135,6 +135,7 @@ term.attachCustomKeyEventHandler(e=>{
   if(e.ctrlKey&&e.shiftKey&&(e.key==="G"||e.key==="g")){toggleGhost();return false;}
   if(e.ctrlKey&&e.shiftKey&&(e.key==="F"||e.key==="f")){goFull();return false;}
   if(e.key==="Escape"){
+    if(mCan){stopMatrix();return false;}
     if(document.getElementById("popwrap").classList.contains("show"))closePop();
     else if(document.getElementById("mapwrap").classList.contains("show"))closeMap();
     else if(document.getElementById("pkgwrap").classList.contains("show"))closePkg();
@@ -452,7 +453,10 @@ const HELP=[["help","this list"],["ghost v_start3","begin the ambient stream"],[
   ["map","open the world attack map"],["mission","objectives + score"],["director <on/off>","auto-rotate scenes"],
   ["attack [ip]","full offensive chain on a host"],["pull [ip]","intel dossier on a host"],["bank","financial access (sim)"],
   ["exfil","exfiltrate files"],["hashcat [hash]","hash cracking"],["geoip [ip]","geolocate an ip"],["whois [ip]","whois lookup"],
-  ["wipe","clear tracks / logs"],["beacon","C2 beacon feed"],["cams","CCTV camera grid popup"],["vault","data-heist popup"],["alert","breach-alert popup"],
+  ["wipe","clear tracks / logs"],["beacon","C2 beacon feed"],["secure","fight back / lower threat"],
+  ["ddos [ip]","volumetric flood"],["inject [ip]","payload injection"],["rootkit","install rootkit"],
+  ["spray","password spray"],["keylog","keystroke capture"],["netstat","connection table"],["ps","process list"],
+  ["cams","CCTV grid (live video)"],["spy [ip]","single webcam popup"],["vault","data-heist popup"],["alert","breach-alert popup"],["matrix","enter the matrix"],
   ["reset","restore default settings"],["full","fullscreen"],["clear","wipe screen"],["about","what this is"]];
 function isIp(s){return /^\d{1,3}(\.\d{1,3}){3}$/.test(s||"");}
 function findMake(ip){let t=W.targets.find(x=>x.ip===ip);if(!t){t=makeTarget();if(isIp(ip))t.ip=ip;W.targets.push(t);renderTopo();}return t;}
@@ -462,6 +466,7 @@ function findMake(ip){let t=W.targets.find(x=>x.ip===ip);if(!t){t=makeTarget();i
 const BANKS=["Meridian Trust","Nullsec Credit Union","Gray Line Bank","Orbital Savings","Vexcorp Financial","Iron Gate Holdings"];
 const CITIES=[["Reykjavík","IS"],["Zürich","CH"],["Singapore","SG"],["Ashburn VA","US"],["Amsterdam","NL"],["São Paulo","BR"],["Tokyo","JP"],["Bucharest","RO"]];
 const XORGS=["nortech","umbranet","cygnus","helix-dyn","blackmesa","orbital","grayline","meridian","vexcorp","nullsec","irongate"];
+const CAM_VIDS=["D4c0UTnNXDM"]; // stock CCTV footage played in the cams popup
 function money(){ return "$"+R.i(1,9)+","+String(R.i(0,999)).padStart(3,"0")+","+String(R.i(0,999)).padStart(3,"0"); }
 function doAttack(ip){
   const t=ip&&isIp(ip)?findMake(ip):(R.pick(W.targets)||makeTarget());
@@ -530,15 +535,21 @@ function openPop(title,html,cls){
   const dlg=document.getElementById("popdlg"); dlg.className=""; if(cls)dlg.classList.add(cls);
   document.getElementById("popwrap").classList.add("show");
 }
-function closePop(){ document.getElementById("popwrap").classList.remove("show"); if(popTimer){clearInterval(popTimer);popTimer=null;} term.focus(); }
+function closePop(){ document.getElementById("popwrap").classList.remove("show"); if(popTimer){clearInterval(popTimer);popTimer=null;} document.getElementById("popbody").innerHTML=""; term.focus(); }
+function camTile(name,vid,st){
+  return `<div class="camtile"><iframe src="https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&mute=1&controls=0&loop=1&playlist=${vid}&start=${st}&modestbranding=1&playsinline=1&rel=0" allow="autoplay; encrypted-media" referrerpolicy="origin" frameborder="0"></iframe><div class="scan"></div><div class="lbl">${name}</div><div class="rec">● REC</div><div class="ts">${new Date().toTimeString().slice(0,8)}</div></div>`;
+}
 function camsPop(){
   const names=["VAULT-CAM-03","LOBBY-02","SERVER-RM-01","PARKING-07","ELEVATOR-04","LOADING-09","ROOF-01","CORRIDOR-05","DATA-HALL-02"];
-  const tiles=R.shuffle(names).slice(0,9).map(n=>
-    R.chance(.18)?`<div class="camtile lost">▞ SIGNAL LOST ▞</div>`
-    :`<div class="camtile"><div class="noise"></div><div class="scan"></div><div class="lbl">${n}</div><div class="rec">● REC</div><div class="ts">${new Date().toTimeString().slice(0,8)}</div></div>`
+  const tiles=R.shuffle(names).slice(0,6).map(n=>
+    R.chance(.15)?`<div class="camtile lost">▞ SIGNAL LOST ▞</div>`:camTile(n,R.pick(CAM_VIDS),R.i(0,500))
   ).join("");
   openPop("CCTV // "+R.i(6,32)+" FEEDS", `<div class="camgrid">${tiles}</div>`);
   popTimer=setInterval(()=>document.querySelectorAll("#popbody .ts").forEach(e=>e.textContent=new Date().toTimeString().slice(0,8)),1000);
+}
+function webcamPop(ip){
+  ip=isIp(ip)?ip:((R.pick(W.targets)||{}).ip||privIP());
+  openPop("WEBCAM // "+ip, `<div class="camgrid single">${camTile("CAM-0 · "+ip,R.pick(CAM_VIDS),R.i(0,400))}</div>`);
 }
 function vaultPop(){
   const files=[["payroll_2026.xlsx","4.2 MB"],["customers.db","1.1 GB"],["id_rsa","3 KB"],["secrets.env","12 KB"],["backups.tar.gz","8.7 GB"],["emails.pst","2.3 GB"],["blueprints.pdf","44 MB"],["research.7z","910 MB"]];
@@ -550,6 +561,73 @@ function breachPop(){
   openPop("⚠ ALERT", `<div class="breachbox"><div class="bt">SYSTEM BREACHED</div><div class="bs">ROOT ACCESS GRANTED · ALL SYSTEMS COMPROMISED</div><div class="bn">(simulation — press Esc or click away)</div></div>`,"breach");
   pushThreat("crit","system breach alert");
 }
+
+/* ---- DEFENSE: secure command that fights back and lowers the threat ---- */
+function secureCmd(){
+  wl("");wl(pri("▣ DEFENSE GRID ")+dim("— countermeasures engaging…"));
+  for(let i=0;i<R.i(3,6);i++){ const res=R.chance(.75)?pri("BLOCKED"):amber("quarantined");
+    wl(red("  ⚔ inbound ")+fg(pad(randIP(),16))+dim(R.pick(["port scan","brute force","exploit probe","C2 callback","SQLi attempt"])+" → ")+res); }
+  const c=R.pick(CITIES);
+  wl(cyan("  ↩ counter-trace ")+dim("→ attacker at ")+fg(randIP())+dim(" ("+c[0]+", "+c[1]+")"));
+  if(R.chance(.55))wl(pri("  ⚡ counter-strike ")+dim("→ ")+wht("attacker node disabled"));
+  wl(pri("  ✓ "+R.i(4,24)+" threats neutralized")+dim(" · firewall hardened · IDS armed"));
+  W.threatScore=Math.max(0,W.threatScore-R.i(25,50)); renderThreat();
+  wl("");
+}
+/* ---- more built-in commands ---- */
+function netstatCmd(){ wl(dim("$ ")+wht("netstat -antp"));
+  wl(dim("Proto  Local                Foreign              State"));
+  for(let i=0;i<R.i(5,8);i++)wl(dim("tcp    "+pad(privIP()+":"+R.i(1024,65535),21)+pad(randIP()+":"+R.pick([443,22,80,4444,8443]),21))+fg(R.pick(["ESTABLISHED","TIME_WAIT","LISTEN","SYN_SENT","CLOSE_WAIT"])));
+  wl(""); }
+function psCmd(){ wl(dim("$ ")+wht("ps aux | grep -v grep"));
+  const procs=["ghostd","beacon","nmapd","exfil","keymon","rootkit","c2agent","sshd","hashcat"];
+  for(let i=0;i<R.i(5,8);i++)wl(dim("root  "+pad(R.i(100,9999),6)+pad((R.i(0,400)/10).toFixed(1)+"%",6)+pad(R.i(1,900)+"M",7))+fg("/usr/sbin/"+R.pick(procs)));
+  wl(""); }
+function ddosCmd(ip){ ip=isIp(ip)?ip:privIP(); wl(red("▓ DDoS ")+wht(ip)+dim(" — "+R.i(10,50)+"k-node botnet"));
+  for(let i=0;i<R.i(3,5);i++)wl(amber("  "+R.i(2,90)+" Gbps ")+dim(R.pick(["SYN flood","UDP flood","HTTP flood","DNS amp","slowloris"])+" → "+ip+":"+R.pick([80,443])));
+  wl(red("  target ")+wht(R.pick(["UNREACHABLE","timing out","degraded","offline"]))); pushThreat("high","DDoS on "+ip); wl(""); }
+function injectCmd(ip){ const t=isIp(ip)?findMake(ip):(R.pick(W.targets)||makeTarget());
+  wl(dim("$ ")+wht("inject --payload ghost.bin "+t.ip));
+  wl(dim("  staging payload ...... ")+pri("done")); wl(dim("  bypassing ASLR/DEP ... ")+pri("ok"));
+  wl(pri("  ⟹ payload executed on ")+wht(t.host)+dim(" — reverse shell live")); t.breached=true;renderTopo();pushThreat("crit","payload injected "+t.host); wl(""); }
+function rootkitCmd(){ wl(dim("$ ")+wht("insmod ghostkit.ko"));
+  ["hiding PID 0x"+R.hex(4),"hooking syscall table","masking /proc entries","persisting via initramfs","disabling audit daemon"].forEach(s=>wl(dim("  "+pad(s,30))+pri("ok")));
+  wl(pri("  rootkit resident ")+dim("— invisible to ps, lsmod, netstat")); wl(""); }
+function sprayCmd(){ wl(dim("$ ")+wht("spray --users all --pass "+R.pick(["Autumn2026!","Welcome1","Company@123"])));
+  const hosts=W.targets.map(t=>t.host).concat(["corp.lan","vpn.lan"]);
+  for(let i=0;i<R.i(4,7);i++)wl(dim("  "+pad(R.pick(USERS)+"@"+R.pick(hosts),30))+(R.chance(.18)?pri("VALID"):dim("fail")));
+  wl(dim("  sprayed "+R.i(40,900)+" accounts · "+R.i(0,6)+" hit(s)")); wl(""); }
+function keylogCmd(){ wl(cyan("[KEYLOG] ")+dim("capturing "+((R.pick(W.targets)||{host:"host"}).host)));
+  const snips=["sudo su -","ssh admin@10.x","cat /etc/shadow","password: ********","mysql -u root -p****","scp loot.tgz ghost@","rm -rf ~/.bash_history","export AWS_SECRET=****"];
+  R.shuffle(snips).slice(0,R.i(3,5)).forEach(s=>wl(dim("  "+new Date().toTimeString().slice(0,8)+"  ")+fg(s)));
+  wl(""); }
+
+/* ---- MATRIX rain overlay ---- */
+let mRAF=null,mCan=null,mCtx=null,mDrops=[];
+function startMatrix(){
+  if(mCan)return;
+  mCan=document.createElement("canvas"); mCan.id="matrixcanvas";
+  mCan.style.cssText="position:fixed;inset:0;z-index:90;pointer-events:none;background:rgba(2,4,3,.82)";
+  document.body.appendChild(mCan);
+  const resize=()=>{mCan.width=innerWidth;mCan.height=innerHeight;mDrops=Array(Math.max(1,Math.floor(innerWidth/14))).fill(0).map(()=>Math.floor(Math.random()*innerHeight/14));};
+  resize(); mCan._resize=resize; addEventListener("resize",resize);
+  mCtx=mCan.getContext("2d");
+  const CH="アカサタナハマ0123456789ABCDEF<>/\\*#".split("");
+  let last=0;
+  const loop=(ts)=>{ mRAF=requestAnimationFrame(loop);
+    if(ts-last<48)return; last=ts;
+    mCtx.fillStyle="rgba(2,4,3,.09)"; mCtx.fillRect(0,0,mCan.width,mCan.height);
+    mCtx.font="14px monospace";
+    const hex="#"+PRI.map(x=>x.toString(16).padStart(2,"0")).join("");
+    for(let i=0;i<mDrops.length;i++){ const x=i*14, y=mDrops[i]*14;
+      mCtx.fillStyle=Math.random()<0.02?"#eafff7":hex; mCtx.fillText(CH[Math.floor(Math.random()*CH.length)],x,y);
+      mDrops[i]=(y>mCan.height&&Math.random()>0.975)?0:mDrops[i]+1; }
+  };
+  mRAF=requestAnimationFrame(loop);
+  wl(pri("entered the matrix")+dim(" — type 'matrix' or press Esc to exit")+"\n");
+}
+function stopMatrix(){ if(!mCan)return; cancelAnimationFrame(mRAF); removeEventListener("resize",mCan._resize); mCan.remove(); mCan=null;mCtx=null; }
+function toggleMatrix(){ mCan?stopMatrix():startMatrix(); }
 
 function runCmd(raw){
   const p=raw.trim().split(/\s+/),c=(p[0]||"").toLowerCase(),a=p[1];
@@ -606,8 +684,18 @@ function runCmd(raw){
     case"wipe":case"cleanup":case"coverts":wipeCmd();break;
     case"beacon":case"c2":beaconCmd();break;
     case"cams":case"cctv":camsPop();break;
+    case"spy":case"webcam":webcamPop(a);break;
     case"vault":case"files":vaultPop();break;
     case"alert":case"breachscreen":breachPop();break;
+    case"secure":case"defend":case"fortify":case"counter":secureCmd();break;
+    case"netstat":case"connections":netstatCmd();break;
+    case"ps":case"proc":psCmd();break;
+    case"ddos":case"flood":ddosCmd(a);break;
+    case"inject":case"payload":injectCmd(a);break;
+    case"rootkit":case"backdoor":rootkitCmd();break;
+    case"spray":case"passwordspray":sprayCmd();break;
+    case"keylog":case"keylogger":keylogCmd();break;
+    case"matrix":case"rain":toggleMatrix();break;
     case"port":case"pop":case"popout":
       if((a||"").toLowerCase()==="close")portClose();
       else{popOut();wl(dim("opening a port — new monitor window")+"\n");}
@@ -1068,6 +1156,7 @@ document.getElementById("cfgwrap").addEventListener("mousedown",e=>{if(e.target.
 document.getElementById("pkgwrap").addEventListener("mousedown",e=>{if(e.target.id==="pkgwrap")closePkg();});
 /* bare-letter shortcuts only when focus is OUTSIDE the terminal (e.g. a panel) */
 addEventListener("keydown",e=>{
+  if(mCan){if(e.key==="Escape")stopMatrix();return;}
   if(document.getElementById("popwrap").classList.contains("show")){if(e.key==="Escape")closePop();return;}
   if(document.getElementById("mapwrap").classList.contains("show")){if(e.key==="Escape")closeMap();return;}
   if(document.getElementById("pkgwrap").classList.contains("show")){if(e.key==="Escape")closePkg();return;}

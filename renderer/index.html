@@ -250,7 +250,9 @@ body.transparent #grime,body.transparent #vig,body.transparent #scan{display:non
 #popdlg{width:min(900px,95vw);max-height:90vh;overflow:auto;background:var(--panelbg);border:2px solid var(--primary);box-shadow:6px 6px 0 #000,0 0 0 2px #000}
 #popbody{padding:12px}
 .camgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.camtile{position:relative;aspect-ratio:4/3;background:#050709;border:1px solid var(--line2);overflow:hidden}
+.camgrid.single{grid-template-columns:1fr;max-width:760px;margin:0 auto}
+.camtile{position:relative;aspect-ratio:16/9;background:#050709;border:1px solid var(--line2);overflow:hidden}
+.camtile iframe{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none}
 .camtile .noise{position:absolute;inset:0;opacity:.28;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");animation:camshift .25s steps(2) infinite}
 .camtile .scan{position:absolute;left:0;right:0;height:16px;background:linear-gradient(rgba(0,255,163,.18),transparent);animation:camscan 3.2s linear infinite}
 .camtile .lbl{position:absolute;top:3px;left:4px;font-family:var(--pixel);font-size:8px;color:var(--primary);text-shadow:0 0 3px #000}
